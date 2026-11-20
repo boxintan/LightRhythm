@@ -26,6 +26,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import android.os.SystemClock
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 
 @Composable
 fun PhotoImportRoute(modifier: Modifier = Modifier) {
@@ -40,6 +44,31 @@ fun PhotoImportRoute(modifier: Modifier = Modifier) {
     var repairedPreview by remember { mutableStateOf<Bitmap?>(null) }
     var decodeMs by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
+    val saveCurrentPreview: () -> Unit = {
+        val preview = repairedPreview ?: bitmap
+        if (preview != null && !loading && !processing && !saving) {
+            saving = true
+            saveMessage = null
+            scope.launch {
+                try {
+                    savePhotoPreview(context, preview)
+                    saveMessage = "预览副本已保存到相册 Pictures/LightRhythm（${preview.width} × ${preview.height}）"
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    saveMessage = "保存失败，请检查可用空间和存储权限后重试。"
+                } finally {
+                    saving = false
+                }
+            }
+        }
+    }
+    val writePermission = rememberLauncherForActivityResult(RequestPermission()) { granted ->
+        if (granted) saveCurrentPreview()
+        else saveMessage = "未获得保存权限，未保存副本。照片导入仍可使用。"
+    }
     val pipeline = remember { PhotoProcessingPipeline() }
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         // Cancelling preserves the previous selection.
@@ -55,6 +84,7 @@ fun PhotoImportRoute(modifier: Modifier = Modifier) {
         bitmap = null
         repairedPreview = null
         processingMessage = null
+        saveMessage = null
         decodeMs = null
         val started = SystemClock.elapsedRealtime()
         try {
@@ -74,7 +104,14 @@ fun PhotoImportRoute(modifier: Modifier = Modifier) {
         } catch (_: android.content.ActivityNotFoundException) {
             error = "系统没有可用的照片选择器。"
         }
-    }, modifier, processing, processingMessage, repairedPreview, decodeMs) {
+    }, modifier, processing, processingMessage, repairedPreview, decodeMs,
+        saving = saving, saveMessage = saveMessage, onSavePhoto = {
+            if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED) {
+                writePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            } else saveCurrentPreview()
+        }) {
         val source = bitmap ?: return@PhotoImportScreen
         if (!processing) {
             processing = true
@@ -110,15 +147,22 @@ fun PhotoImportScreen(
     onSelectPhoto: () -> Unit, modifier: Modifier = Modifier,
     processing: Boolean = false, processingMessage: String? = null,
     repairedPreview: Bitmap? = null, decodeMs: Long? = null,
+    saving: Boolean = false, saveMessage: String? = null,
+    onSavePhoto: () -> Unit = {},
     onProcessPhoto: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
         Text("导入本地照片 · 当前仅显示预览，尚未进行横纹修复")
-        Button(onClick = onSelectPhoto, enabled = !loading && !processing) { Text("选择照片") }
-        Button(onClick = onProcessPhoto, enabled = bitmap != null && !loading && !processing) {
+        Button(onClick = onSelectPhoto, enabled = !loading && !processing && !saving) { Text("选择照片") }
+        Button(onClick = onProcessPhoto, enabled = bitmap != null && !loading && !processing && !saving) {
             Text("生成修复预览")
         }
+        Button(onClick = onSavePhoto, enabled = bitmap != null && !loading && !processing && !saving) {
+            Text(if (saving) "正在保存…" else "保存预览副本")
+        }
+        Text("保存当前预览尺寸的 PNG 副本，不覆盖原图。", style = MaterialTheme.typography.bodySmall)
+        saveMessage?.let { Text(it) }
         decodeMs?.let { Text("照片读取耗时：$it ms（不含修复）") }
         processingMessage?.let { Text(it) }
         if (processing) {
