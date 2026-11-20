@@ -33,3 +33,16 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Credentials and personal machine files
+.DS_Store
+.env
+.env.*
+!.env.example
+keystore.properties
+key.properties
+secrets.properties
+*.pem
+*.key
+*.p12
+*.pfx
