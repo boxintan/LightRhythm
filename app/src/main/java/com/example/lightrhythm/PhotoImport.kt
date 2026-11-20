@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import android.os.SystemClock
 
 @Composable
 fun PhotoImportRoute(modifier: Modifier = Modifier) {
@@ -33,6 +35,12 @@ fun PhotoImportRoute(modifier: Modifier = Modifier) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var processing by remember { mutableStateOf(false) }
+    var processingMessage by remember { mutableStateOf<String?>(null) }
+    var repairedPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var decodeMs by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
+    val pipeline = remember { PhotoProcessingPipeline() }
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         // Cancelling preserves the previous selection.
         if (uri != null) {
@@ -45,8 +53,13 @@ fun PhotoImportRoute(modifier: Modifier = Modifier) {
         loading = true
         error = null
         bitmap = null
+        repairedPreview = null
+        processingMessage = null
+        decodeMs = null
+        val started = SystemClock.elapsedRealtime()
         try {
             bitmap = withContext(Dispatchers.IO) { decodePhotoPreview(context, Uri.parse(uri)) }
+            decodeMs = SystemClock.elapsedRealtime() - started
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -61,26 +74,64 @@ fun PhotoImportRoute(modifier: Modifier = Modifier) {
         } catch (_: android.content.ActivityNotFoundException) {
             error = "系统没有可用的照片选择器。"
         }
-    }, modifier)
+    }, modifier, processing, processingMessage, repairedPreview, decodeMs) {
+        val source = bitmap ?: return@PhotoImportScreen
+        if (!processing) {
+            processing = true
+            processingMessage = null
+            repairedPreview = null
+            scope.launch {
+                try {
+                    val timed = pipeline.run(source, strength = 1f)
+                    when (val result = timed.result) {
+                        ProcessingResult.NotIntegrated ->
+                            processingMessage = "算法尚未接入，未生成修复结果。"
+                        is ProcessingResult.Preview -> {
+                            repairedPreview = result.bitmap
+                            processingMessage = "修复预览耗时：${timed.elapsedMs} ms"
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    processingMessage = "处理失败，请重试。原始照片未被修改。"
+                } finally {
+                    processing = false
+                }
+            }
+        }
+    }
 }
 
 // Stateless UI: member D can replace the layout without changing photo loading.
 @Composable
 fun PhotoImportScreen(
     bitmap: Bitmap?, loading: Boolean, error: String?,
-    onSelectPhoto: () -> Unit, modifier: Modifier = Modifier
+    onSelectPhoto: () -> Unit, modifier: Modifier = Modifier,
+    processing: Boolean = false, processingMessage: String? = null,
+    repairedPreview: Bitmap? = null, decodeMs: Long? = null,
+    onProcessPhoto: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
         Text("导入本地照片 · 当前仅显示预览，尚未进行横纹修复")
-        Button(onClick = onSelectPhoto, enabled = !loading) { Text("选择照片") }
+        Button(onClick = onSelectPhoto, enabled = !loading && !processing) { Text("选择照片") }
+        Button(onClick = onProcessPhoto, enabled = bitmap != null && !loading && !processing) {
+            Text("生成修复预览")
+        }
+        decodeMs?.let { Text("照片读取耗时：$it ms（不含修复）") }
+        processingMessage?.let { Text(it) }
+        if (processing) {
+            CircularProgressIndicator()
+            Text("正在处理…")
+        }
         if (loading) {
             CircularProgressIndicator()
             Text("正在读取照片…")
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (bitmap != null) {
-            Image(bitmap.asImageBitmap(), "所选照片预览", Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
+            Image((repairedPreview ?: bitmap).asImageBitmap(), if (repairedPreview != null) "修复预览" else "所选照片预览", Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
         } else if (!loading && error == null) {
             Text("请选择一张照片开始。原始照片不会被修改。")
         }
