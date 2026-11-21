@@ -20,6 +20,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            providers.environmentVariable("LIGHTRHYTHM_DEBUG_KEYSTORE_PATH").orNull?.let {
+                storeFile = file(it)
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {

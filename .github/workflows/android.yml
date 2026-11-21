@@ -41,6 +41,7 @@ jobs:
           mkdir -p "$HOME/.android"
           umask 077
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          echo "LIGHTRHYTHM_DEBUG_KEYSTORE_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
       - name: Build APK and run unit tests
         run: |
           bash ./gradlew :app:assembleDebug :app:testDebugUnitTest --console=plain \
@@ -49,6 +50,15 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/LightRhythm.apk
           (cd dist && sha256sum LightRhythm.apk > LightRhythm.apk.sha256)
+      - name: Verify team signing certificate before publication
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          expected='78d4131af5c44c09b775aa22efc29cd5c158514619061a2bab5a79675698d014'
+          actual="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs dist/LightRhythm.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          if [ "$actual" != "$expected" ]; then
+            echo 'Signing certificate mismatch; refusing to publish an incompatible update.' >&2
+            exit 1
+          fi
       - name: Save build for publication
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
