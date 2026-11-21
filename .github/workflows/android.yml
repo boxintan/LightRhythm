@@ -1,0 +1,101 @@
+name: Android build and phone download
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+      - name: Restore stable team debug signing key
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.LIGHTRHYTHM_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo 'Missing LIGHTRHYTHM_DEBUG_KEYSTORE_B64 repository secret.' >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+      - name: Build APK and run unit tests
+        run: |
+          bash ./gradlew :app:assembleDebug :app:testDebugUnitTest --console=plain \
+            -PciVersionCode="$((100000 + GITHUB_RUN_NUMBER))" \
+            -PciVersionName="1.0.preview.${GITHUB_RUN_NUMBER}"
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/LightRhythm.apk
+          (cd dist && sha256sum LightRhythm.apk > LightRhythm.apk.sha256)
+      - name: Save build for publication
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: LightRhythm-apk
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove signing key from runner
+        if: always()
+        run: rm -f "$HOME/.android/debug.keystore"
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: LightRhythm-apk
+          path: dist
+      - name: Publish the latest successful main build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Never replace the download with a superseded main build.
+          current_sha="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')"
+          if [ "$current_sha" != "$GITHUB_SHA" ]; then
+            echo 'A newer main commit exists; skipping publication.'
+            exit 0
+          fi
+          tag="preview-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          cat > notes.md <<EOF
+          光律团队测试版，供软创赛开发和演示使用，非正式发行版。
+
+          手机下载 LightRhythm.apk 后确认安装更新，无需电脑或数据线。
+          该版本沿用团队调试签名；若安装的是其他成员独立签名的版本，需要先卸载旧版。
+
+          源码提交：${GITHUB_SHA}
+          构建编号：${GITHUB_RUN_NUMBER}
+          EOF
+          # Publish only after both APK and checksum are uploaded.
+          gh release create "$tag" --target "$GITHUB_SHA" --draft \
+            --title "光律团队测试版 #${GITHUB_RUN_NUMBER}" --notes-file notes.md \
+            dist/LightRhythm.apk dist/LightRhythm.apk.sha256
+          gh release edit "$tag" --draft=false --latest
+          echo '手机下载：https://github.com/boxintan/LightRhythm/releases/latest/download/LightRhythm.apk' >> "$GITHUB_STEP_SUMMARY"
