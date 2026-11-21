@@ -13,8 +13,9 @@ android {
         applicationId = "com.example.lightrhythm"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // CI builds increase monotonically so phones can install them as updates.
+        versionCode = providers.gradleProperty("ciVersionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("ciVersionName").orNull ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
