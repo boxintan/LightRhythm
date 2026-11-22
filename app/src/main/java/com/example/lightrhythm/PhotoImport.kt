@@ -74,7 +74,7 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
         if (granted) saveCurrentPreview()
         else saveMessage = "未获得保存权限，未保存副本。照片导入仍可使用。"
     }
-    val pipeline = remember { PhotoProcessingPipeline() }
+    val pipeline = remember { PhotoProcessingPipeline(BandingPhotoProcessor) }
     val detectionPipeline = remember { PhotoDetectionPipeline() }
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         // Cancelling preserves the previous selection.
@@ -142,6 +142,7 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
                     when (val result = timed.result) {
                         ProcessingResult.NotIntegrated ->
                             processingMessage = "修复算法尚未接入，未生成修复结果。"
+                        is ProcessingResult.NotApplied -> processingMessage = result.message
                         is ProcessingResult.Preview -> {
                             repairedPreview = result.bitmap
                             processingMessage = "修复预览耗时：${timed.elapsedMs} ms"

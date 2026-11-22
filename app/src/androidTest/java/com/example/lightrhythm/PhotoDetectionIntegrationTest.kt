@@ -53,6 +53,9 @@ class PhotoDetectionIntegrationTest {
             compose.onNodeWithText("重新检测").assertIsEnabled()
             compose.onNodeWithContentDescription("所选照片预览").assertExists()
             compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
+            compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
+            awaitText("颜色横带暂不支持修复")
+            compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
             assertArrayEquals(before, file.readBytes())
         } finally { file.delete() }
     }
@@ -64,6 +67,27 @@ class PhotoDetectionIntegrationTest {
         compose.onNodeWithText("选择照片").assertIsEnabled()
         compose.onNodeWithText("检测横纹", substring = false).assertIsNotEnabled()
         compose.onNodeWithText("疑似颜色横带").assertDoesNotExist()
+    }
+
+    @Test fun supportedGrayBandsProduceDistinctRepairPreview() {
+        val width = 65
+        val height = 512
+        val pixels = IntArray(width * height) { i ->
+            val gray = (128 * (1 + .15 * sin(2 * PI * (i / width) / 16))).toInt()
+            (255 shl 24) or (gray shl 16) or (gray shl 8) or gray
+        }
+        val bitmap = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+        val file = File.createTempFile("repair-preview-", ".png", context.cacheDir)
+        try {
+            file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            val before = file.readBytes()
+            compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+            awaitText("疑似明暗横纹")
+            compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
+            awaitText("修复预览耗时：")
+            compose.onNodeWithContentDescription("修复预览").performScrollTo().assertIsDisplayed()
+            assertArrayEquals(before, file.readBytes())
+        } finally { bitmap.recycle(); file.delete() }
     }
 
     @Test fun unsupportedTransparencyKeepsPreviewAndAllowsRetry() {

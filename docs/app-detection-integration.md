@@ -1,5 +1,7 @@
 # 选图与横纹检测对接
 
+后续更新：已接通 B 的短周期明暗修复预览，63 项 JVM、23 项设备测试通过。颜色横带仍不支持修复。见 [修复对接](repair-integration.md)，以下保留首次选图检测对接记录。
+
 日期：2026-11-22；开发分支 feature/detection。检测算法仍为 row-color-periodicity-v3。
 
 ## 已实现的用户流程
