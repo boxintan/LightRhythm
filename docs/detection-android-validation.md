@@ -1,5 +1,7 @@
 # Android 检测验证
 
+后续进度：已接通选图后的自动检测和结果卡片，并扩充到 19 项设备测试；见 [App 对接记录](app-detection-integration.md)。下文保留首次完成算法设备验证时的记录。
+
 日期：2026-11-22。算法版本 row-color-periodicity-v3，分支 feature/detection。
 
 ## 本轮结果

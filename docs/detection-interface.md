@@ -1,6 +1,8 @@
 # 横纹检测接口草案 v3
 
-2026-11-22 验证更新：debug APK、测试 APK 和 App JVM 测试已通过；API 37 模拟器的 9 项检测测试通过，其中两张真实照片各四个尺寸均检出颜色候选。使用独立验证包，不等于已接入 App 页面或已验证实体手机。详见 [Android 验证](detection-android-validation.md)。
+选图对接更新：已在当前检测分支接通 PhotoImportRoute → PhotoDetectionPipeline → detectBanding → DetectionResultCard，基于最长边 1600 的预览图检测，页面展示对应分支周期和实际预览尺寸。19 项设备测试及实际系统选图检查通过。见 [App 检测对接](app-detection-integration.md)。
+
+2026-11-22 算法验证记录：debug APK、测试 APK 和 App JVM 测试已通过；API 37 模拟器的 9 项算法测试通过，其中两张真实照片各四个尺寸均检出颜色候选。实体手机尚未验证，选图页面对接进度见上。详见 [Android 验证](detection-android-validation.md)。
 
 2026-11-22：颜色分支的去趋势半径现在按输入高度缩放。`ColorDetectionConfig.referenceHeightRows` 默认 1440；实际半径为 round(trendRadiusRows × 输入高度 / referenceHeightRows)，限制在 1～1024 行。设为 null 时使用固定半径，可复现 v2 的计算。原明暗分支、幅度/相关阈值及颜色最大搜索周期 1024 行均未改变。
 
