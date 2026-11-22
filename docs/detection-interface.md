@@ -1,5 +1,7 @@
 # 横纹检测接口草案 v3
 
+2026-11-22 验证更新：debug APK、测试 APK 和 App JVM 测试已通过；API 37 模拟器的 9 项检测测试通过，其中两张真实照片各四个尺寸均检出颜色候选。使用独立验证包，不等于已接入 App 页面或已验证实体手机。详见 [Android 验证](detection-android-validation.md)。
+
 2026-11-22：颜色分支的去趋势半径现在按输入高度缩放。`ColorDetectionConfig.referenceHeightRows` 默认 1440；实际半径为 round(trendRadiusRows × 输入高度 / referenceHeightRows)，限制在 1～1024 行。设为 null 时使用固定半径，可复现 v2 的计算。原明暗分支、幅度/相关阈值及颜色最大搜索周期 1024 行均未改变。
 
 `colorEvidence.effectiveTrendRadiusRows` 和 `effectiveMaxLagRows` 记录本次实际窗口与最大搜索滞后。候选周期、区域坐标和行序列继续使用传入 Bitmap 的坐标，不自动换算原图坐标。版本为 `row-color-periodicity-v3`；关闭颜色分支仍为 `row-periodicity-v1`。详见 [分辨率一致性验证](detection-v3-resolution.md)。

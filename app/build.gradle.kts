@@ -20,6 +20,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep algorithm verification separate from the team's installed application.
+            if (providers.gradleProperty("detectionVerification").orNull == "true") {
+                applicationIdSuffix = ".detectiontest"
+            }
+        }
         release {
             optimization {
                 enable = true
