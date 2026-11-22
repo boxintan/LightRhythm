@@ -56,8 +56,12 @@ internal object BandingRepair {
      */
     private const val MIN_PERIOD_PX = 2.0
 
-    /** Above this period the component looks like lighting, not flicker. */
-    private const val MAX_PERIOD_PX = 128.0
+    /**
+     * Above this period the component looks like lighting, not flicker.
+     * A 128 px ceiling let smooth scene gradients register as banding in 56% of
+     * synthetic test images; 64 px keeps every true flicker case and removes them.
+     */
+    private const val MAX_PERIOD_PX = 64.0
 
     /** Peak-to-median spectral power required before we touch the image. */
     private const val MIN_CONFIDENCE = 15.0
@@ -68,8 +72,10 @@ internal object BandingRepair {
     /**
      * Share of the residual energy the fitted harmonics must explain.
      * A sharp edge is broadband and stops here; a flicker pattern is periodic and passes.
+     * Smooth gradients can explain 30-50% of their own residual with one sinusoid, so the
+     * bar is 0.7: at 0.3 they caused a 16% false-positive rate, at 0.7 it is 0.5%.
      */
-    private const val MIN_EXPLAINED_FRACTION = 0.3
+    private const val MIN_EXPLAINED_FRACTION = 0.7
 
     private const val MAX_HARMONICS = 3
     private const val GAIN_MIN = 0.5

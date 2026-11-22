@@ -366,4 +366,40 @@ class BandingRepairTest {
 
         assertTrue("output must stay finite", outcome.luma.all { it.isFinite() })
     }
+
+    /** Smooth random field with grain: realistic non-banding content. */
+    private fun smoothScene(width: Int, height: Int, random: Random): FloatArray {
+        val gridW = 8
+        val gridH = 8
+        val grid = DoubleArray(gridW * gridH) { 0.3 + random.nextDouble() * 0.4 }
+        val luma = FloatArray(width * height)
+        for (y in 0 until height) {
+            val gy = y.toDouble() / (height - 1) * (gridH - 1)
+            val y0 = gy.toInt().coerceAtMost(gridH - 2)
+            val fy = gy - y0
+            for (x in 0 until width) {
+                val gx = x.toDouble() / (width - 1) * (gridW - 1)
+                val x0 = gx.toInt().coerceAtMost(gridW - 2)
+                val fx = gx - x0
+                val top = grid[y0 * gridW + x0] * (1 - fx) + grid[y0 * gridW + x0 + 1] * fx
+                val bottom = grid[(y0 + 1) * gridW + x0] * (1 - fx) + grid[(y0 + 1) * gridW + x0 + 1] * fx
+                val value = top * (1 - fy) + bottom * fy + (random.nextDouble() - 0.5) * 0.05
+                luma[y * width + x] = value.toFloat().coerceIn(0f, 1f)
+            }
+        }
+        return luma
+    }
+
+    @Test
+    fun falsePositivesStayRareOnSmoothScenes() {
+        val width = 320
+        val height = 240
+        var flagged = 0
+        repeat(30) { index ->
+            val luma = smoothScene(width, height, Random(1000L + index))
+            if (BandingRepair.repair(luma, width, height).applied) flagged++
+        }
+
+        assertTrue("smooth scenes wrongly flagged as banding: $flagged/30", flagged <= 1)
+    }
 }
