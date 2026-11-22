@@ -270,4 +270,100 @@ class BandingRepairTest {
         assertTrue(outcome.applied)
         assertTrue("repair took ${elapsedMs}ms", elapsedMs < 3000.0)
     }
+
+    private fun pureBanding(
+        width: Int,
+        height: Int,
+        period: Double,
+        amplitude: Double,
+        base: Float = 0.5f,
+    ): FloatArray {
+        val luma = FloatArray(width * height)
+        for (y in 0 until height) {
+            val gain = 1.0 + amplitude * sin(2.0 * PI * y / period)
+            for (x in 0 until width) luma[y * width + x] = (base * gain).toFloat()
+        }
+        return luma
+    }
+
+    @Test
+    fun handlesUniformImages() {
+        val width = 64
+        val height = 480
+        val cases = mapOf(
+            "white" to FloatArray(width * height) { 1f },
+            "black" to FloatArray(width * height) { 0f },
+            "gray" to FloatArray(width * height) { 0.5f },
+        )
+        for ((name, luma) in cases) {
+            val outcome = BandingRepair.repair(luma, width, height)
+            assertFalse("$name image must not be modified", outcome.applied)
+        }
+    }
+
+    @Test
+    fun worksOnAnyPositiveScale() {
+        val width = 64
+        val height = 480
+        val luma = pureBanding(width, height, period = 8.0, amplitude = 0.15, base = 128f)
+        val outcome = BandingRepair.repair(luma, width, height)
+
+        assertTrue("0..255 scale input should still be analysed", outcome.applied)
+        assertEquals(8.0, outcome.estimate!!.periodPx, 0.5)
+    }
+
+    @Test
+    fun rejectsBandingAtNyquistLimit() {
+        val luma = pureBanding(64, 480, period = 2.0, amplitude = 0.15)
+
+        val outcome = BandingRepair.repair(luma, 64, 480)
+
+        assertFalse("a 2 px period sits on the Nyquist limit", outcome.applied)
+    }
+
+    @Test
+    fun handlesSinglePixelDimensions() {
+        val thinColumn = BandingRepair.repair(FloatArray(480) { 0.5f }, 1, 480)
+        assertFalse(thinColumn.applied)
+        assertEquals(480, thinColumn.luma.size)
+
+        val thinRow = BandingRepair.repair(FloatArray(480) { 0.5f }, 480, 1)
+        assertFalse(thinRow.applied)
+        assertEquals(480, thinRow.luma.size)
+    }
+
+    @Test
+    fun leavesNonFiniteInputUntouched() {
+        val width = 64
+        val height = 480
+
+        val nan = FloatArray(width * height) { Float.NaN }
+        val nanOutcome = BandingRepair.repair(nan, width, height)
+        assertFalse(nanOutcome.applied)
+        assertTrue(nanOutcome.luma.all { it.isNaN() })
+
+        val infinite = FloatArray(width * height) { Float.POSITIVE_INFINITY }
+        val infOutcome = BandingRepair.repair(infinite, width, height)
+        assertFalse(infOutcome.applied)
+    }
+
+    @Test
+    fun coercesOutOfRangeStrength() {
+        val image = synthetic(640, 480, BandingAxis.HORIZONTAL, period = 8.0, amplitude = 0.18)
+
+        val negative = BandingRepair.repair(image.luma, image.width, image.height, strength = -2f)
+        assertFalse("negative strength must behave like zero", negative.applied)
+
+        val over = BandingRepair.repair(image.luma, image.width, image.height, strength = 2f)
+        assertTrue("strength above one must clamp to full", over.applied)
+    }
+
+    @Test
+    fun handlesExtremelyDarkImage() {
+        val luma = pureBanding(64, 480, period = 8.0, amplitude = 0.18, base = 1e-6f)
+
+        val outcome = BandingRepair.repair(luma, 64, 480)
+
+        assertTrue("output must stay finite", outcome.luma.all { it.isFinite() })
+    }
 }

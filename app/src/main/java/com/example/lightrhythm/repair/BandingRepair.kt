@@ -45,11 +45,15 @@ internal data class RepairOutcome(
  * brightness varies along the banding axis.
  *
  * Input is normalized luminance (0..1 recommended; any positive scale works). The caller's
- * array is never mutated and the returned array is always a fresh copy.
+ * array is never mutated and the returned array is always a fresh copy. Images smaller than
+ * 16 samples along the analysed axis, uniform images, and non-finite inputs are left untouched.
  */
 internal object BandingRepair {
 
-    /** Below this period the "bands" are indistinguishable from texture. */
+    /**
+     * Below this period the "bands" are indistinguishable from texture.
+     * A 2 px period sits exactly on the Nyquist limit and is not resolvable in practice.
+     */
     private const val MIN_PERIOD_PX = 2.0
 
     /** Above this period the component looks like lighting, not flicker. */
