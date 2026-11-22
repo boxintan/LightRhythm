@@ -44,12 +44,17 @@ jobs:
           echo "LIGHTRHYTHM_DEBUG_KEYSTORE_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
       - name: Build APK and run unit tests
         run: |
-          bash ./gradlew :app:assembleDebug :app:testDebugUnitTest --console=plain \
+          bash ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain \
             -PciVersionCode="$((100000 + GITHUB_RUN_NUMBER))" \
             -PciVersionName="1.0.preview.${GITHUB_RUN_NUMBER}"
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/LightRhythm.apk
           (cd dist && sha256sum LightRhythm.apk > LightRhythm.apk.sha256)
+          python3 scripts/create_update_manifest.py \
+            --apk dist/LightRhythm.apk \
+            --aapt2 "$ANDROID_HOME/build-tools/36.0.0/aapt2" \
+            --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/preview-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/LightRhythm.apk" \
+            --output dist/update.json
       - name: Verify team signing certificate before publication
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
@@ -106,6 +111,6 @@ jobs:
           # Publish only after both APK and checksum are uploaded.
           gh release create "$tag" --target "$GITHUB_SHA" --draft \
             --title "光律团队测试版 #${GITHUB_RUN_NUMBER}" --notes-file notes.md \
-            dist/LightRhythm.apk dist/LightRhythm.apk.sha256
+            dist/LightRhythm.apk dist/LightRhythm.apk.sha256 dist/update.json
           gh release edit "$tag" --draft=false --latest
           echo '手机下载：https://github.com/boxintan/LightRhythm/releases/latest/download/LightRhythm.apk' >> "$GITHUB_STEP_SUMMARY"
