@@ -13,13 +13,14 @@ import com.example.lightrhythm.ui.theme.LightRhythmTheme
 
 class MainActivity : ComponentActivity() {
     private val photoModel: PhotoViewModel by viewModels()
+    private val updateModel: AppUpdateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             LightRhythmTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+                Scaffold(modifier = Modifier.fillMaxSize(), topBar = { AppUpdateBar(updateModel) }) { padding ->
                     PhotoImportRoute(photoModel, Modifier.padding(padding))
                 }
             }

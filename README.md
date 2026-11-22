@@ -1,6 +1,25 @@
 # LightRhythm
 Android-based LED flicker banding detection and photo restoration
 
+## App 内检查更新
+
+安装包含此功能的版本后，点击页面右上方的 **检查更新 → 下载新版 → 安装更新**。
+第一次安装时，手机可能要求允许“光律”安装应用；完成后会返回并打开系统安装确认界面。
+无需电脑、数据线或打开浏览器找下载链接。下载可取消，失败可重试；照片处理不受检查更新影响。
+
+目前更新信息和 APK 仍托管于 GitHub，部分网络仍需要 VPN。App 内更新不会绕过网络访问限制，也不会静默安装。
+现有旧版本还没有此入口，需要先通过原下载链接安装一次新版本，以后再从 App 内更新。
+
+### 更新源与校验
+
+CI 会从实际 APK 读取版本信息，发布 `update.json`、APK 和 SHA-256 校验文件；manifest 指向同一发布的固定版本 APK，避免混用版本。
+App 只提供更高版本，下载到应用私有缓存，校验长度、SHA-256、应用包名、版本号和当前安装签名之后才开放安装。
+安装权限只在用户点击安装时请求。更新不会自动卸载应用或覆盖用户的原始照片。
+
+后续如有国内服务器，可通过 Gradle 参数 `-PupdateMetadataUrl=https://你的域名/update.json` 指定 HTTPS 更新信息地址。
+JSON 格式参见 Release 附件 `update.json`；把其中的 `apkUrl` 改为国内 APK 地址，并保持实际版本、大小和 SHA-256 一致。
+请使用固定团队签名。仅换信息地址、但仍让 `apkUrl` 指向 GitHub，不能解决手机访问 GitHub 的问题。
+
 ## 用手机更新 App（无需连接电脑）
 
 [点击下载最新团队测试版 APK](https://github.com/boxintan/LightRhythm/releases/latest/download/LightRhythm.apk)
