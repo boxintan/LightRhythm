@@ -60,7 +60,9 @@ ImageIO 不应用 EXIF 方向。请使用像素方向已经正确、横纹呈水
 
 分母为零时指标留空，不能解释为零错误或百分之百正确。ERROR 和 SKIPPED 不应被遗漏：必须同时看覆盖率和各类缺口。没有人工标注的真实样本时，无法计算检测准确性。
 
-耗时只覆盖桌面逐行统计和周期分析，不含图片读取/解码，没有预热，不能当作手机耗时。当前工具使用默认 DetectionConfig 和 ColorDetectionConfig，版本为 row-color-periodicity-v2；旧报告可能为 row-periodicity-v1。规则变化后，应在新目录重新评估并保留对应代码版本。
+耗时只覆盖桌面逐行统计和周期分析，不含图片读取/解码，没有预热，不能当作手机耗时。当前工具使用默认 DetectionConfig 和 ColorDetectionConfig，版本为 row-color-periodicity-v3；旧报告可能为 row-periodicity-v1 或 row-color-periodicity-v2。规则变化后，应在新目录重新评估并保留对应代码版本。
+
+v3 的颜色去趋势窗口默认按输入高度缩放；报告新增 colorTrendRadiusRows、colorMaxLagRows，分别是实际去趋势半径和最大搜索滞后。跨分辨率比较及复现命令见 [分辨率验证](detection-v3-resolution.md)。
 
 v2 增加颜色横带分支。results.csv 的原有 score、periodRows、rms、autocorrelation、regionSupport 仍为亮度字段；新增 luminanceStatus 以及 colorChannel、colorPeriodRows、colorScore、colorAutocorrelation、colorRegionSupport。颜色列选取通过疑似判据且 score 最高的通道，完整双通道证据可用 InspectDetectionImage 查看。status=SUSPECTED_COLOR_BANDING 时，原亮度 score 可以为 0，这是两个独立分支的结果。评估统计中两种疑似状态均视为预测阳性；使用 banding 标签前须明确目标是否包含颜色横带，目前两张课堂图片仍为 unknown，未用于计算准确性指标。
 

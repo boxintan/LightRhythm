@@ -26,6 +26,7 @@ fun main(args: Array<String>) {
             index, region.startX, region.endXExclusive, region.rmsAmplitude,
             region.autocorrelation, region.agreementWithWholeImage, region.supportsCandidate))
     }
+    result.colorEvidence?.let { println("colorTrendRadiusRows=${it.effectiveTrendRadiusRows}, colorMaxLagRows=${it.effectiveMaxLagRows}") }
     result.colorEvidence?.channels?.forEach { channel ->
         println("colorChannel=${channel.channel}, status=${channel.status}, period=${channel.candidatePeriodRows}, " +
             "rms=${channel.rmsAmplitude}, correlation=${channel.autocorrelation}, support=${channel.regionSupport}")

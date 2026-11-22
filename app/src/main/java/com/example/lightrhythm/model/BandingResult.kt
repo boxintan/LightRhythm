@@ -67,17 +67,19 @@ data class BandingResult(
         status == BandingStatus.SUSPECTED_COLOR_BANDING
 }
 
-/** Independent color search; periods and window sizes use input Bitmap row coordinates. */
+/** Periods use input rows; trendRadiusRows is scaled from referenceHeightRows unless null. */
 data class ColorDetectionConfig(
     val enabled: Boolean = true,
     val maxPeriodRows: Int = 1024,
     val minCycles: Int = 2,
     val trendRadiusRows: Int = 256,
+    val referenceHeightRows: Int? = 1440,
 ) {
     init {
         require(maxPeriodRows in 4..1024)
         require(minCycles >= 2)
         require(trendRadiusRows > 0 && trendRadiusRows <= 1024)
+        require(referenceHeightRows == null || referenceHeightRows >= 64)
     }
 }
 
@@ -97,6 +99,8 @@ data class ColorBandingEvidence(
     val channels: List<ColorChannelEvidence>,
     val config: ColorDetectionConfig,
     val luminanceStatus: BandingStatus,
+    val effectiveTrendRadiusRows: Int = config.trendRadiusRows,
+    val effectiveMaxLagRows: Int = 0,
 ) {
     val isSuspected: Boolean get() = channels.any { it.status == BandingStatus.SUSPECTED }
 }

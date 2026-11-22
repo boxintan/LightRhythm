@@ -105,6 +105,7 @@ internal fun runEvaluation(args: Array<String>) {
         "id", "path", "label", "split", "group", "outcome", "status", "width", "height", "score",
         "periodRows", "rms", "autocorrelation", "regionSupport", "desktopAnalysisMs", "algorithmVersion", "error",
         "luminanceStatus", "colorChannel", "colorPeriodRows", "colorScore", "colorAutocorrelation", "colorRegionSupport",
+        "colorTrendRadiusRows", "colorMaxLagRows",
     )) + records.map { record ->
         val r = record.result; val s = record.sample
         val color = r?.colorEvidence?.channels?.filter { it.status == BandingStatus.SUSPECTED }?.maxByOrNull { it.score }
@@ -114,7 +115,9 @@ internal fun runEvaluation(args: Array<String>) {
             r?.regionSupport.text(), record.elapsedMs.text(), r?.algorithmVersion ?: "", record.error,
             r?.colorEvidence?.luminanceStatus?.name ?: r?.status?.name ?: "", color?.channel ?: "",
             color?.candidatePeriodRows?.toString() ?: "", color?.score.text(),
-            color?.autocorrelation.text(), color?.regionSupport.text())
+            color?.autocorrelation.text(), color?.regionSupport.text(),
+            r?.colorEvidence?.effectiveTrendRadiusRows?.toString() ?: "",
+            r?.colorEvidence?.effectiveMaxLagRows?.toString() ?: "")
     })
     writeCsv(File(output, "summary.csv"), listOf(listOf(
         "split", "total", "labeled", "evaluated", "errors", "skipped", "unlabeled",

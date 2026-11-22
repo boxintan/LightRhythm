@@ -1,4 +1,10 @@
-# 横纹检测接口草案 v2
+# 横纹检测接口草案 v3
+
+2026-11-22：颜色分支的去趋势半径现在按输入高度缩放。`ColorDetectionConfig.referenceHeightRows` 默认 1440；实际半径为 round(trendRadiusRows × 输入高度 / referenceHeightRows)，限制在 1～1024 行。设为 null 时使用固定半径，可复现 v2 的计算。原明暗分支、幅度/相关阈值及颜色最大搜索周期 1024 行均未改变。
+
+`colorEvidence.effectiveTrendRadiusRows` 和 `effectiveMaxLagRows` 记录本次实际窗口与最大搜索滞后。候选周期、区域坐标和行序列继续使用传入 Bitmap 的坐标，不自动换算原图坐标。版本为 `row-color-periodicity-v3`；关闭颜色分支仍为 `row-periodicity-v1`。详见 [分辨率一致性验证](detection-v3-resolution.md)。
+
+以下为 v2 引入的颜色接口；其中固定 256 行窗口现由以上缩放规则替代。
 
 2026-11-22：新增独立颜色横带检测。`detectBanding(bitmap, config)` 仍可调用，默认启用颜色检测；第三个可选参数为 `ColorDetectionConfig`。复现旧版时传 `colorConfig = ColorDetectionConfig(enabled = false)`。
 
