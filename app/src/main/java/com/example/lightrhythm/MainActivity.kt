@@ -1,6 +1,7 @@
 package com.example.lightrhythm
 
 import android.os.Bundle
+import androidx.activity.viewModels
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -11,13 +12,15 @@ import androidx.compose.ui.Modifier
 import com.example.lightrhythm.ui.theme.LightRhythmTheme
 
 class MainActivity : ComponentActivity() {
+    private val photoModel: PhotoViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             LightRhythmTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    PhotoImportRoute(Modifier.padding(padding))
+                    PhotoImportRoute(photoModel, Modifier.padding(padding))
                 }
             }
         }
