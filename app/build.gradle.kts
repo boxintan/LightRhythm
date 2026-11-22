@@ -17,7 +17,7 @@ android {
         versionCode = providers.gradleProperty("ciVersionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("ciVersionName").orNull ?: "1.0"
         val updateUrl = providers.gradleProperty("updateMetadataUrl").orNull
-            ?: "https://api.github.com/repos/boxintan/LightRhythm/releases/latest"
+            ?: "https://github.com/boxintan/LightRhythm/releases/latest/download/update.json"
         require(updateUrl.startsWith("https://") && updateUrl.none { it == '"' || it == '\\' || it.isWhitespace() })
         buildConfigField("String", "UPDATE_METADATA_URL", "\"$updateUrl\"")
 
