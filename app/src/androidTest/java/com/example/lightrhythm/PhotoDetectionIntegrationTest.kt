@@ -86,6 +86,12 @@ class PhotoDetectionIntegrationTest {
             compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
             awaitText("修复预览耗时：")
             compose.onNodeWithContentDescription("修复预览").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("原图", substring = false).performScrollTo().performClick().assertIsSelected()
+            compose.onNodeWithContentDescription("所选照片预览").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
+            compose.onNodeWithText("保存修复副本").assertExists()
+            compose.onNodeWithText("修复图", substring = false).performScrollTo().performClick().assertIsSelected()
+            compose.onNodeWithContentDescription("修复预览").performScrollTo().assertIsDisplayed()
             assertArrayEquals(before, file.readBytes())
         } finally { bitmap.recycle(); file.delete() }
     }
@@ -101,6 +107,28 @@ class PhotoDetectionIntegrationTest {
             compose.onNodeWithText("检测横纹", substring = false).assertIsEnabled()
             compose.onNodeWithText("疑似颜色横带").assertDoesNotExist()
         } finally { bitmap.recycle(); file.delete() }
+    }
+
+    @Test fun newSelectionClearsRepairComparisonControls() {
+        val original = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val repaired = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val replacement = Bitmap.createBitmap(80, 64, Bitmap.Config.ARGB_8888)
+        val current = mutableStateOf(original to (repaired as Bitmap?))
+        val shown = mutableStateOf(true)
+        try {
+            compose.setContent { MaterialTheme {
+                if (shown.value) PhotoImportScreen(current.value.first, false, null, {}, repairedPreview = current.value.second)
+            } }
+            compose.onNodeWithText("原图", substring = false).performScrollTo().performClick()
+            compose.runOnIdle { current.value = replacement to null }
+            compose.onNodeWithText("修复前后对比").assertDoesNotExist()
+            compose.onNodeWithText("保存修复副本").assertDoesNotExist()
+            compose.onNodeWithText("保存预览副本").assertExists()
+            compose.onNodeWithContentDescription("所选照片预览").assertExists()
+        } finally {
+            compose.runOnIdle { shown.value = false }; compose.waitForIdle()
+            original.recycle(); repaired.recycle(); replacement.recycle()
+        }
     }
 
     @Test fun processingStateDisablesSelectionDetectionRepairAndSave() {

@@ -176,6 +176,7 @@ internal fun PhotoImportScreen(
     onProcessPhoto: () -> Unit = {}
 ) {
     val busy = loading || processing || saving || detecting
+    var showOriginal by remember(bitmap, repairedPreview) { mutableStateOf(false) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
         Text("选择照片后自动检测横纹，可查看候选周期。")
@@ -193,9 +194,9 @@ internal fun PhotoImportScreen(
             Text("生成修复预览")
         }
         Button(onClick = onSavePhoto, enabled = bitmap != null && !busy) {
-            Text(if (saving) "正在保存…" else "保存预览副本")
+            Text(if (saving) "正在保存…" else if (repairedPreview != null) "保存修复副本" else "保存预览副本")
         }
-        Text("保存当前预览尺寸的 PNG 副本，不覆盖原图。", style = MaterialTheme.typography.bodySmall)
+        Text(if (repairedPreview != null) "保存修复预览尺寸的 PNG 副本，不覆盖原图。" else "保存当前预览尺寸的 PNG 副本，不覆盖原图。", style = MaterialTheme.typography.bodySmall)
         saveMessage?.let { Text(it) }
         decodeMs?.let { Text("照片读取耗时：$it ms（不含修复）") }
         processingMessage?.let { Text(it) }
@@ -209,7 +210,20 @@ internal fun PhotoImportScreen(
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (bitmap != null) {
-            Image((repairedPreview ?: bitmap).asImageBitmap(), if (repairedPreview != null) "修复预览" else "所选照片预览", Modifier.fillMaxWidth().height(320.dp), contentScale = ContentScale.Fit)
+            if (repairedPreview != null) {
+                Text("修复前后对比", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(selected = showOriginal, onClick = { showOriginal = true },
+                        enabled = !busy, label = { Text("原图") })
+                    FilterChip(selected = !showOriginal, onClick = { showOriginal = false },
+                        enabled = !busy, label = { Text("修复图") })
+                }
+                Text(if (showOriginal) "当前显示：原图预览" else "当前显示：修复预览")
+            }
+            val showRepair = repairedPreview != null && !showOriginal
+            Image((if (showRepair) repairedPreview!! else bitmap).asImageBitmap(),
+                if (showRepair) "修复预览" else "所选照片预览",
+                Modifier.fillMaxWidth().height(320.dp), contentScale = ContentScale.Fit)
         } else if (!loading && error == null) {
             Text("请选择一张照片开始。原始照片不会被修改。")
         }
