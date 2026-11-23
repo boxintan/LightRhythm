@@ -277,7 +277,8 @@ class ChromaBandingRepairTest {
 
         assertTrue(outcome.applied)
         assertEquals(BandingKind.CHROMATIC, outcome.estimate!!.kind)
-        assertEquals(period, outcome.estimate!!.periodPx, 0.0)
+        // The supplied period is refined locally by up to 6% before fitting.
+        assertEquals(period, outcome.estimate!!.periodPx, period * 0.06)
 
         val after = amplitudeAt(
             profile(outcome.planes!![0], image.width, image.height, BandingAxis.HORIZONTAL).let { r ->
@@ -287,6 +288,71 @@ class ChromaBandingRepairTest {
             period,
         )
         assertTrue("residual $after should be far below $before", after < before * 0.3)
+    }
+
+    @Test
+    fun doesNotTurnSceneStructureIntoNewStripes() {
+        // A slide with text lines about 127 px apart. At a 391 px band period that spacing is
+        // the third harmonic, and fitting harmonics re-applied the text rows as a ~6% new
+        // fine stripe pattern across the whole photo.
+        val width = 300
+        val height = 1200
+        val period = 391.0
+        val planes = Array(3) { FloatArray(width * height) }
+        for (y in 0 until height) {
+            val textRow = y % 127 < 9
+            for (x in 0 until width) {
+                val base = if (textRow) 0.35 else 0.82
+                planes[0][y * width + x] = base.toFloat()
+                planes[1][y * width + x] = base.toFloat()
+                planes[2][y * width + x] = base.toFloat()
+            }
+        }
+        // project chromatic banding on top
+        val depths = flatLumaDepths(-0.10, -0.15)
+        for (y in 0 until height) {
+            val wave = sin(2.0 * PI * y / period)
+            for (x in 0 until width) {
+                val index = y * width + x
+                for (c in 0 until 3) {
+                    planes[c][index] = (planes[c][index] * (1.0 + depths[c] * wave)).toFloat().coerceIn(0f, 1f)
+                }
+            }
+        }
+        val before = profile(planes[0], width, height, BandingAxis.HORIZONTAL)
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(planes, width, height, period)
+        assertTrue(outcome.applied)
+
+        val after = profile(outcome.planes!![0], width, height, BandingAxis.HORIZONTAL)
+        val gain = DoubleArray(height) { if (before[it] > 1e-6) after[it] / before[it] else 1.0 }
+        val fineRipple = amplitudeAt(gain, 127.0)
+        val bandCorrection = amplitudeAt(gain, period)
+
+        assertTrue("new 127 px stripes must stay negligible, was $fineRipple", fineRipple < 0.02)
+        assertTrue("the 391 px correction should still be applied, was $bandCorrection", bandCorrection > 0.05)
+    }
+
+    @Test
+    fun refinesAPeriodThatIsSlightlyOff() {
+        val width = 300
+        val height = 1200
+        val truePeriod = 391.0
+        val image = build(width, height, BandingAxis.HORIZONTAL, truePeriod, flatLumaDepths(-0.10, -0.15), base = 0.6)
+        val before = amplitudeAt(chromaOf(image.planes, width, height), truePeriod)
+
+        // Detector reports 370: 5% low.
+        val outcome = ChromaBandingRepair.repairWithPeriod(image.planes, width, height, 370.0)
+        assertTrue(outcome.applied)
+
+        val after = amplitudeAt(chromaOf(outcome.planes!!, width, height), truePeriod)
+        assertTrue("a 5% period error must still be corrected, residual $after vs $before", after < before * 0.25)
+    }
+
+    private fun chromaOf(planes: Array<FloatArray>, width: Int, height: Int): DoubleArray {
+        val r = profile(planes[0], width, height, BandingAxis.HORIZONTAL)
+        val g = profile(planes[1], width, height, BandingAxis.HORIZONTAL)
+        return DoubleArray(r.size) { r[it] - g[it] }
     }
 
     @Test

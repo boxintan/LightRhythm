@@ -173,12 +173,26 @@ internal object ChromaBandingRepair {
             DoubleArray(n) { ln(max(profiles[channel][it], floorValue)) }
         }
 
-        val fundamental = 1.0 / periodPx
-        val redGreen = fitHarmonics(detrendLinear(DoubleArray(n) { i -> logProfiles[0][i] - logProfiles[1][i] }), fundamental)
-        val blueGreen = fitHarmonics(detrendLinear(DoubleArray(n) { i -> logProfiles[2][i] - logProfiles[1][i] }), fundamental)
-        val luma = fitHarmonics(detrend(DoubleArray(n) { i ->
-            (logProfiles[0][i] + logProfiles[1][i] + logProfiles[2][i]) / PLANES
-        }), fundamental)
+        // The reported period is an estimate; nudge it to the best local fit first, otherwise a
+        // few percent of error leaves a visible residual wave across the frame.
+        val redGreenResidual = detrendLinear(DoubleArray(n) { i -> logProfiles[0][i] - logProfiles[1][i] })
+        val blueGreenResidual = detrendLinear(DoubleArray(n) { i -> logProfiles[2][i] - logProfiles[1][i] })
+        val period = refinePeriod(periodPx, n, redGreenResidual, blueGreenResidual)
+        val fundamental = 1.0 / period
+
+        // Fundamental only. A projector's bands are essentially sinusoidal, and letting the fit
+        // take harmonics lets scene structure through: with a 391 px period the third harmonic
+        // sits near 130 px, where text lines on a slide happily fit and get re-applied as new
+        // fine stripes across the whole photo.
+        val redGreen = fitHarmonics(redGreenResidual, fundamental, 1)
+        val blueGreen = fitHarmonics(blueGreenResidual, fundamental, 1)
+        val luma = fitHarmonics(
+            detrend(DoubleArray(n) { i ->
+                (logProfiles[0][i] + logProfiles[1][i] + logProfiles[2][i]) / PLANES
+            }),
+            fundamental,
+            1,
+        )
 
         val chromaAmplitude = max(redGreen.amplitude, blueGreen.amplitude)
         val chromaLed = chromaAmplitude >= luma.amplitude
@@ -186,13 +200,13 @@ internal object ChromaBandingRepair {
             return ChannelRepairOutcome(null, null, applied = false)
         }
 
-        val gains = Array(PLANES) { channel -> gainCurve(logProfiles[channel], profiles[channel], fundamental) }
+        val gains = Array(PLANES) { channel -> gainCurve(logProfiles[channel], profiles[channel], fundamental, 1) }
         val corrected = Array(PLANES) { channel ->
             applyGain(planes[channel], width, height, gains[channel], axis, blend)
         }
         val estimate = BandingEstimate(
             axis = axis,
-            periodPx = periodPx,
+            periodPx = period,
             amplitude = if (chromaLed) chromaAmplitude else luma.amplitude,
             confidence = 1.0,
             kind = if (chromaLed) BandingKind.CHROMATIC else BandingKind.LUMINANCE,
@@ -436,10 +450,15 @@ internal object ChromaBandingRepair {
      * Fits the fundamental and up to two harmonics to a log profile and returns the
      * multiplier that removes them.
      */
-    private fun gainCurve(logProfile: DoubleArray, profile: DoubleArray, fundamental: Double): DoubleArray {
+    private fun gainCurve(
+        logProfile: DoubleArray,
+        profile: DoubleArray,
+        fundamental: Double,
+        maxHarmonics: Int = MAX_HARMONICS,
+    ): DoubleArray {
         val n = logProfile.size
         val residual = detrend(logProfile)
-        val fit = fitHarmonics(residual, fundamental)
+        val fit = fitHarmonics(residual, fundamental, maxHarmonics)
         if (fit.frequencies.isEmpty()) return DoubleArray(n) { 1.0 }
 
         val floorValue = max(profile.average() * 0.05, EPS)
@@ -459,13 +478,43 @@ internal object ChromaBandingRepair {
         return gain
     }
 
-    private fun fitHarmonics(signal: DoubleArray, fundamental: Double): Fit {
+    /**
+     * Searches +/-6% around [reported] for the period that carries the most colour modulation.
+     * A few percent of mismatch is enough to leave a visible residual wave on a 3-cycle frame.
+     */
+    private fun refinePeriod(reported: Double, n: Int, vararg signals: DoubleArray): Double {
+        var best = reported
+        var bestEnergy = -1.0
+        var factor = 0.94
+        while (factor <= 1.0601) {
+            val candidate = reported * factor
+            if (candidate >= MIN_PERIOD_PX && candidate <= n / 2.0) {
+                var energy = 0.0
+                for (signal in signals) {
+                    val fit = fitHarmonics(signal, 1.0 / candidate, 1)
+                    energy += fit.amplitude * fit.amplitude
+                }
+                if (energy > bestEnergy) {
+                    bestEnergy = energy
+                    best = candidate
+                }
+            }
+            factor += 0.004
+        }
+        return best
+    }
+
+    private fun fitHarmonics(
+        signal: DoubleArray,
+        fundamental: Double,
+        maxHarmonics: Int = MAX_HARMONICS,
+    ): Fit {
         val n = signal.size
         var energy = 0.0
         for (value in signal) energy += value * value
         if (energy < EPS) return Fit(DoubleArray(0), DoubleArray(0), DoubleArray(0), 0.0, 0.0)
 
-        val maxHarmonic = min(MAX_HARMONICS, floor(0.5 / fundamental).toInt().coerceAtLeast(1))
+        val maxHarmonic = min(maxHarmonics, floor(0.5 / fundamental).toInt().coerceAtLeast(1))
         val frequencies = ArrayList<Double>(maxHarmonic)
         val cosines = ArrayList<Double>(maxHarmonic)
         val sines = ArrayList<Double>(maxHarmonic)
