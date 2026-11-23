@@ -21,6 +21,7 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
     val heading = when (result.status) {
         BandingStatus.SUSPECTED -> if (color != null) "疑似明暗横纹及颜色横带" else "疑似明暗横纹"
         BandingStatus.SUSPECTED_COLOR_BANDING -> "疑似颜色横带"
+        BandingStatus.SUSPECTED_BROAD_COLOR_BAND -> "疑似宽幅色带"
         BandingStatus.LOW_AMPLITUDE, BandingStatus.NO_CLEAR_PERIODICITY -> "未发现明确的周期横纹"
         BandingStatus.INCONSISTENT_REGIONS -> "存在局部周期变化，暂不能确认横纹"
         BandingStatus.INSUFFICIENT_DATA -> "图片尺寸不足，暂时无法判断"
@@ -28,6 +29,7 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(heading, style = MaterialTheme.typography.titleMedium)
+            result.broadColorEvidence?.let { Text("白色/灰色画面中检测到横向颜色变化，不要求重复周期。") }
             if (result.status == BandingStatus.SUSPECTED) {
                 result.candidatePeriodRows?.let { Text("明暗候选周期：$it 像素行") }
             }

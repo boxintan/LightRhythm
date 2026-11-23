@@ -39,6 +39,7 @@ $sourceFiles = @(
     Get-ChildItem -LiteralPath $testPackage -File -Filter '*.kt'
 ) | Select-Object -ExpandProperty FullName
 $sourceFiles += Join-Path $PSScriptRoot 'EvaluateDetection.kt'
+$sourceFiles += Join-Path $PSScriptRoot 'InspectBroadColor.kt'
 $toolTestPackage = Join-Path $PSScriptRoot 'tests'
 $sourceFiles += Get-ChildItem -LiteralPath $toolTestPackage -File -Filter '*Test.kt' | Select-Object -ExpandProperty FullName
 if ($SampleImage) {

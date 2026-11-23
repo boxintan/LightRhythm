@@ -38,6 +38,7 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
     val context = LocalContext.current.applicationContext
     var selectedUri by rememberSaveable { mutableStateOf(initialPhotoUri) }
     var selectionVersion by rememberSaveable { mutableStateOf(0) }
+    var neutralBackground by rememberSaveable { mutableStateOf(false) }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -75,7 +76,9 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
         else saveMessage = "未获得保存权限，未保存副本。照片导入仍可使用。"
     }
     val pipeline = remember { PhotoProcessingPipeline(BandingPhotoProcessor) }
-    val detectionPipeline = remember { PhotoDetectionPipeline() }
+    val detectionPipeline = remember(neutralBackground) {
+        PhotoDetectionPipeline { com.example.lightrhythm.detection.detectBanding(it, assumeNeutralBackground = neutralBackground) }
+    }
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         // Cancelling preserves the previous selection.
         if (uri != null) {
@@ -83,7 +86,7 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
             selectionVersion++
         }
     }
-    LaunchedEffect(selectedUri, selectionVersion) {
+    LaunchedEffect(selectedUri, selectionVersion, neutralBackground) {
         val uri = selectedUri ?: return@LaunchedEffect
         val requestVersion = selectionVersion
         loading = true
@@ -130,8 +133,13 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
                 writePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             } else saveCurrentPreview()
         }, detecting = detecting, detection = detection, detectionError = detectionError,
-        onDetectPhoto = { selectionVersion++ }) {
+        onDetectPhoto = { selectionVersion++ }, neutralBackground = neutralBackground,
+        onNeutralBackgroundChange = { neutralBackground = it; selectionVersion++ }) {
         val source = bitmap ?: return@PhotoImportScreen
+        if (detection?.result?.broadColorEvidence != null) {
+            processingMessage = "宽幅颜色横带暂不支持修复，未生成修复预览。"
+            return@PhotoImportScreen
+        }
         if (!processing) {
             processing = true
             processingMessage = null
@@ -173,6 +181,8 @@ internal fun PhotoImportScreen(
     detection: TimedDetectionResult? = null,
     detectionError: String? = null,
     onDetectPhoto: () -> Unit = {},
+    neutralBackground: Boolean = false,
+    onNeutralBackgroundChange: (Boolean) -> Unit = {},
     onProcessPhoto: () -> Unit = {}
 ) {
     val busy = loading || processing || saving || detecting
@@ -181,6 +191,10 @@ internal fun PhotoImportScreen(
         Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
         Text("选择照片后自动检测横纹，可查看候选周期。")
         Button(onClick = onSelectPhoto, enabled = !busy) { Text("选择照片") }
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Checkbox(checked = neutralBackground, onCheckedChange = onNeutralBackgroundChange, enabled = !busy)
+            Text("原画面应为白色或灰色（检测宽幅色带）")
+        }
         Button(onClick = onDetectPhoto, enabled = bitmap != null && !busy) {
             Text(if (detection == null) "检测横纹" else "重新检测")
         }

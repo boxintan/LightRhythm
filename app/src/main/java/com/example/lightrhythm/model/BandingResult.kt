@@ -26,6 +26,7 @@ enum class BandingStatus {
     INSUFFICIENT_DATA,
     /** Color-only candidate; consult colorEvidence, do not use luminance row offsets for repair. */
     SUSPECTED_COLOR_BANDING,
+    SUSPECTED_BROAD_COLOR_BAND,
 }
 
 /** x 范围为 [startX, endXExclusive)，均使用输入图片坐标。 */
@@ -62,10 +63,14 @@ data class BandingResult(
     val algorithmVersion: String = "row-periodicity-v2",
     /** Luminance fields above retain their original meaning even for a color-only candidate. */
     val colorEvidence: ColorBandingEvidence? = null,
+    val broadColorEvidence: BroadColorEvidence? = null,
 ) {
     val isSuspected: Boolean get() = status == BandingStatus.SUSPECTED ||
-        status == BandingStatus.SUSPECTED_COLOR_BANDING
+        status == BandingStatus.SUSPECTED_COLOR_BANDING || status == BandingStatus.SUSPECTED_BROAD_COLOR_BAND
 }
+
+/** Only populated when the caller confirms the source content should be white/gray. */
+data class BroadColorEvidence(val channel: String, val chromaSpread: Double, val regionSupport: Double, val validBinFraction: Double)
 
 /** Periods use input rows; trendRadiusRows is scaled from referenceHeightRows unless null. */
 data class ColorDetectionConfig(

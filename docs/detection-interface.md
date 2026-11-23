@@ -1,5 +1,7 @@
 # 横纹检测接口草案 v4
 
+宽幅模式更新：新增可选参数 `assumeNeutralBackground = false`。调用方确认白色/灰色原画面时可置 true，组合版本变为 row-color-broad-v5，附加 broadColorEvidence；无周期而有宽幅证据时为 SUSPECTED_BROAD_COLOR_BAND。默认周期 v4 行为不变，新枚举也计入 isSuspected，不能据此直接调用明暗修复。详见 [宽幅检测](broad-color-detection.md)。
+
 2026-11-23：补充低于最小周期的整数倍候选排除规则，防止短周期纹理绕过 minPeriodRows。字段及坐标不变，组合版本为 row-color-periodicity-v4，关闭颜色分支后的明暗版本为 row-periodicity-v2；以下 v3/v2 说明保留为历史接口演进。详见 [v4 检测验证](detection-v4-minimum-period.md)。
 
 选图对接更新：已在当前检测分支接通 PhotoImportRoute → PhotoDetectionPipeline → detectBanding → DetectionResultCard，基于最长边 1600 的预览图检测，页面展示对应分支周期和实际预览尺寸。19 项设备测试及实际系统选图检查通过。见 [App 检测对接](app-detection-integration.md)。
