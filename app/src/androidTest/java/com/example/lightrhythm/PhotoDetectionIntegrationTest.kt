@@ -65,8 +65,10 @@ class PhotoDetectionIntegrationTest {
             compose.onNodeWithContentDescription("所选照片预览").assertExists()
             compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
             compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
-            awaitText("颜色横带暂不支持修复")
-            compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
+            compose.waitUntil(10_000) {
+                compose.onAllNodesWithContentDescription("修复预览").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithContentDescription("修复预览").assertExists()
             assertArrayEquals(before, file.readBytes())
         } finally { file.delete() }
     }

@@ -2,11 +2,16 @@ package com.example.lightrhythm
 
 import android.graphics.Bitmap
 import com.example.lightrhythm.detection.detectBanding
+import com.example.lightrhythm.detection.detectMoire
 import com.example.lightrhythm.model.BandingStatus
+import com.example.lightrhythm.model.ColorBandingEvidence
+import com.example.lightrhythm.repair.ArgbPlanes
 import com.example.lightrhythm.repair.BandingAxis
 import com.example.lightrhythm.repair.BandingRepair
+import com.example.lightrhythm.repair.ChromaBandingRepair
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.roundToInt
 
 /** Bridges A's Bitmap contract to B's normalized luminance arrays without forcing an estimate. */
@@ -18,8 +23,13 @@ internal object BandingPhotoProcessor : PhotoProcessor {
         if (strength == 0f) return ProcessingResult.NotApplied("修复强度为零，未生成修复预览。")
         val detection = detectBanding(source)
         context.ensureActive()
-        if (detection.colorEvidence?.isSuspected == true) {
-            return ProcessingResult.NotApplied("颜色横带暂不支持修复，未生成修复预览。")
+        if (detectMoire(source).isSuspected) {
+            return ProcessingResult.NotApplied("疑似摩尔纹暂不支持修复，未生成修复预览。")
+        }
+        context.ensureActive()
+        val colorEvidence = detection.colorEvidence
+        if (colorEvidence?.isSuspected == true) {
+            return repairColorBanding(source, colorEvidence, strength, context)
         }
         if (detection.status != BandingStatus.SUSPECTED) {
             return ProcessingResult.NotApplied("未发现可修复的明确明暗横纹，未生成修复预览。")
@@ -59,5 +69,46 @@ internal object BandingPhotoProcessor : PhotoProcessor {
         }
         if (!changed) return ProcessingResult.NotApplied("当前参数未产生像素变化，未生成修复预览。")
         return ProcessingResult.Preview(Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888))
+    }
+
+    /**
+     * Colour paths cannot be repaired by scaling brightness, so they get their own route:
+     * A owns the detection and its period, B fits per-channel gains at that period, and the
+     * preview is only produced when the fit finds real colour modulation to remove.
+     */
+    private fun repairColorBanding(
+        source: Bitmap,
+        evidence: ColorBandingEvidence,
+        strength: Float,
+        context: CoroutineContext,
+    ): ProcessingResult {
+        val candidate = evidence.channels
+            .filter { it.status == BandingStatus.SUSPECTED }
+            .maxByOrNull { it.score }
+            ?: return ProcessingResult.NotApplied("颜色横带证据不足，未生成修复预览。")
+        val periodRows = candidate.candidatePeriodRows
+            ?: return ProcessingResult.NotApplied("颜色横带周期不可用，未生成修复预览。")
+
+        val width = source.width
+        val height = source.height
+        val pixels = IntArray(width * height)
+        source.getPixels(pixels, 0, width, 0, 0, width, height)
+        val outcome = ChromaBandingRepair.repairWithPeriod(
+            planes = ArgbPlanes.toPlanes(pixels),
+            width = width,
+            height = height,
+            periodPx = periodRows.toDouble(),
+            strength = strength,
+            axis = BandingAxis.HORIZONTAL,
+        )
+        context.ensureActive()
+        if (!outcome.applied) {
+            return ProcessingResult.NotApplied("颜色横带检测与修复估计未达成一致，未生成修复预览。")
+        }
+        val corrected = ArgbPlanes.fromPlanes(outcome.planes!!, pixels)
+        if (corrected.contentEquals(pixels)) {
+            return ProcessingResult.NotApplied("当前参数未产生像素变化，未生成修复预览。")
+        }
+        return ProcessingResult.Preview(Bitmap.createBitmap(corrected, width, height, Bitmap.Config.ARGB_8888))
     }
 }

@@ -44,17 +44,48 @@ class BandingPhotoProcessorTest {
         } finally { bitmap.recycle() }
     }
 
-    @Test fun colorBandsAreExplicitlyUnsupported() = runBlocking {
+    @Test fun colorBandsAreRepairedWithoutTouchingTheOriginal() = runBlocking {
         val width = 65
-        val pixels = IntArray(width * 720) { i ->
+        val height = 720
+        val pixels = IntArray(width * height) { i ->
             val wave = 24 * sin(2 * PI * (i / width) / 190)
             (255 shl 24) or ((128 + wave).toInt() shl 16) or ((128 - .299 / .587 * wave).toInt() shl 8) or 128
         }
-        val bitmap = Bitmap.createBitmap(pixels, width, 720, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+        var output: Bitmap? = null
         try {
-            val result = BandingPhotoProcessor.process(bitmap, 1f)
-            assertTrue(result is ProcessingResult.NotApplied)
-            assertTrue((result as ProcessingResult.NotApplied).message.contains("颜色横带"))
+            val result = PhotoProcessingPipeline(BandingPhotoProcessor).run(bitmap, 1f).result
+            assertTrue(result is ProcessingResult.Preview)
+            output = (result as ProcessingResult.Preview).bitmap
+
+            val after = IntArray(pixels.size)
+            bitmap.getPixels(after, 0, width, 0, 0, width, height)
+            assertArrayEquals(pixels, after)
+
+            // Colour alternation must drop while brightness stays put.
+            fun chromaVariation(values: IntArray): Double {
+                val profile = (0 until height).map { y ->
+                    var sum = 0.0
+                    for (x in 0 until width) {
+                        val p = values[y * width + x]
+                        sum += (((p ushr 16) and 255) - ((p ushr 8) and 255)).toDouble()
+                    }
+                    sum / width
+                }
+                val mean = profile.average()
+                return profile.sumOf { val d = it - mean; d * d } / height
+            }
+            val corrected = IntArray(pixels.size)
+            output.getPixels(corrected, 0, width, 0, 0, width, height)
+            assertTrue(chromaVariation(corrected) < chromaVariation(pixels) * .3)
+        } finally { output?.recycle(); bitmap.recycle() }
+    }
+
+    @Test fun flatColorImageDoesNotClaimColorRepair() = runBlocking {
+        val bitmap = Bitmap.createBitmap(64, 720, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(0xff40A0C0.toInt())
+        try {
+            assertTrue(BandingPhotoProcessor.process(bitmap, 1f) is ProcessingResult.NotApplied)
         } finally { bitmap.recycle() }
     }
 }
