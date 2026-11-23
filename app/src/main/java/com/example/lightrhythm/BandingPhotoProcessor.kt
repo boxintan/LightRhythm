@@ -2,6 +2,7 @@ package com.example.lightrhythm
 
 import android.graphics.Bitmap
 import com.example.lightrhythm.detection.detectBanding
+import com.example.lightrhythm.detection.detectMoire
 import com.example.lightrhythm.model.BandingStatus
 import com.example.lightrhythm.repair.BandingAxis
 import com.example.lightrhythm.repair.BandingRepair
@@ -17,6 +18,10 @@ internal object BandingPhotoProcessor : PhotoProcessor {
         context.ensureActive()
         if (strength == 0f) return ProcessingResult.NotApplied("修复强度为零，未生成修复预览。")
         val detection = detectBanding(source)
+        context.ensureActive()
+        if (detectMoire(source).isSuspected) {
+            return ProcessingResult.NotApplied("疑似摩尔纹暂不支持修复，未生成修复预览。")
+        }
         context.ensureActive()
         if (detection.colorEvidence?.isSuspected == true) {
             return ProcessingResult.NotApplied("颜色横带暂不支持修复，未生成修复预览。")

@@ -1,5 +1,7 @@
 # 横纹检测接口草案 v4
 
+摩尔纹检测现有独立接口 `detectMoire(Bitmap): MoireResult`，不更改本接口的周期和状态语义。App 并行展示两类结果，摩尔纹候选禁止送入横纹修复。实现范围与照片验证见 [彩色摩尔纹检测](moire-detection.md)。
+
 宽幅模式更新：新增可选参数 `assumeNeutralBackground = false`。调用方确认白色/灰色原画面时可置 true，组合版本变为 row-color-broad-v5，附加 broadColorEvidence；无周期而有宽幅证据时为 SUSPECTED_BROAD_COLOR_BAND。默认周期 v4 行为不变，新枚举也计入 isSuspected，不能据此直接调用明暗修复。详见 [宽幅检测](broad-color-detection.md)。
 
 2026-11-23：补充低于最小周期的整数倍候选排除规则，防止短周期纹理绕过 minPeriodRows。字段及坐标不变，组合版本为 row-color-periodicity-v4，关闭颜色分支后的明暗版本为 row-periodicity-v2；以下 v3/v2 说明保留为历史接口演进。详见 [v4 检测验证](detection-v4-minimum-period.md)。

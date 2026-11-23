@@ -29,6 +29,15 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(heading, style = MaterialTheme.typography.titleMedium)
+            detection.moire?.let { moire ->
+                Text(when {
+                    moire.testedTiles == 0 -> "图片尺寸不足，暂无法检测摩尔纹"
+                    moire.isSuspected -> "疑似摩尔纹"
+                    else -> "未发现明确的彩色摩尔纹特征"
+                },
+                    style = MaterialTheme.typography.titleMedium)
+                if (moire.isSuspected) Text("多个局部区域存在重复彩色细纹；原有彩色纹理也可能产生相似结果，暂不支持摩尔纹修复。")
+            }
             result.broadColorEvidence?.let { Text("白色/灰色画面中检测到横向颜色变化，不要求重复周期。") }
             if (result.status == BandingStatus.SUSPECTED) {
                 result.candidatePeriodRows?.let { Text("明暗候选周期：$it 像素行") }
