@@ -23,14 +23,18 @@ internal object BandingPhotoProcessor : PhotoProcessor {
         if (strength == 0f) return ProcessingResult.NotApplied("修复强度为零，未生成修复预览。")
         val detection = detectBanding(source)
         context.ensureActive()
+        val colorEvidence = detection.colorEvidence
+        if (colorEvidence?.isSuspected == true) {
+            // Colour repair gets the first chance. A projector screen can also look like moire,
+            // so checking moire first would block the repair on exactly the photos that need it.
+            // The fit refuses on its own when the reported period explains no real modulation.
+            val colourResult = repairColorBanding(source, colorEvidence, strength, context)
+            if (colourResult is ProcessingResult.Preview) return colourResult
+        }
         if (detectMoire(source).isSuspected) {
             return ProcessingResult.NotApplied("疑似摩尔纹暂不支持修复，未生成修复预览。")
         }
         context.ensureActive()
-        val colorEvidence = detection.colorEvidence
-        if (colorEvidence?.isSuspected == true) {
-            return repairColorBanding(source, colorEvidence, strength, context)
-        }
         if (detection.status != BandingStatus.SUSPECTED) {
             return ProcessingResult.NotApplied("未发现可修复的明确明暗横纹，未生成修复预览。")
         }
