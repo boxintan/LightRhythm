@@ -20,7 +20,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LightRhythmTheme {
-                Scaffold(modifier = Modifier.fillMaxSize(), topBar = { AppUpdateBar(updateModel) }) { padding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        if (BuildConfig.APPLICATION_ID == UPDATABLE_APPLICATION_ID) {
+                            AppUpdateBar(updateModel)
+                        }
+                    }
+                ) { padding ->
                     PhotoImportRoute(photoModel, Modifier.padding(padding))
                 }
             }

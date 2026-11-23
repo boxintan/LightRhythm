@@ -5,6 +5,7 @@ import java.io.OutputStream
 import java.net.URI
 import java.security.MessageDigest
 
+internal const val UPDATABLE_APPLICATION_ID = "com.example.lightrhythm"
 internal const val MAX_UPDATE_BYTES = 200L * 1024 * 1024
 
 internal fun requireHttps(url: String): String {
@@ -26,7 +27,7 @@ internal data class AppUpdateMetadata(
     val notes: String,
 ) {
     init {
-        require(applicationId == "com.example.lightrhythm") { "更新包不属于光律" }
+        require(applicationId == UPDATABLE_APPLICATION_ID) { "更新包不属于光律" }
         require(versionCode in 1..2_100_000_000L && versionName.isNotBlank()) { "更新版本信息无效" }
         requireHttps(apkUrl)
         require(sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "更新包校验信息无效" }

@@ -16,6 +16,7 @@ internal fun interface PhotoProcessor {
 
 internal sealed interface ProcessingResult {
     data object NotIntegrated : ProcessingResult
+    data class NotApplied(val message: String) : ProcessingResult
     data class Preview(val bitmap: Bitmap) : ProcessingResult
 }
 

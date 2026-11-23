@@ -3,6 +3,8 @@ package com.example.lightrhythm
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertThrows
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 
@@ -13,8 +15,13 @@ class AppUpdateArchiveTest {
     private val repository = AppUpdateRepository(context)
     @Suppress("DEPRECATION")
     private val info = context.packageManager.getPackageInfo(context.packageName, 0)
-    private val metadata = AppUpdateMetadata(context.packageName, PackageInfoCompat.getLongVersionCode(info),
-        info.versionName ?: "test", "https://example.com/app.apk", "0".repeat(64), 1, 26, "")
+    private val metadata by lazy { AppUpdateMetadata(context.packageName, PackageInfoCompat.getLongVersionCode(info),
+        info.versionName ?: "test", "https://example.com/app.apk", "0".repeat(64), 1, 26, "") }
+
+    @Before fun requiresUpdatablePackage() {
+        assumeTrue("Update archive validation applies to the team's normal app ID",
+            context.packageName == UPDATABLE_APPLICATION_ID)
+    }
 
     @Test fun acceptsInstalledApkWithMatchingPackageVersionAndSigner() {
         repository.verifyArchive(File(context.applicationInfo.sourceDir), metadata)

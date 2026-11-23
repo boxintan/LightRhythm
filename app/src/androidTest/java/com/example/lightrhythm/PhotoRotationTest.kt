@@ -28,12 +28,19 @@ class PhotoRotationTest {
         return null
     }
 
-    private fun awaitNode(match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo {
+    private fun awaitNode(
+        scrollControls: Boolean = false,
+        match: (AccessibilityNodeInfo) -> Boolean
+    ): AccessibilityNodeInfo {
         val end = SystemClock.uptimeMillis() + 8000
         do {
-            val node = find(instrumentation.uiAutomation.rootInActiveWindow, match)
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            val node = find(root, match)
             if (node != null && node.isVisibleToUser) return node
-            SystemClock.sleep(80)
+            if (scrollControls) {
+                find(root) { it.isScrollable }?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            }
+            SystemClock.sleep(if (scrollControls) 250 else 80)
         } while (SystemClock.uptimeMillis() < end)
         throw AssertionError("Expected a visible node on the photo screen")
     }
@@ -41,6 +48,7 @@ class PhotoRotationTest {
     @Test fun rotatingKeepsPreviewAndFeedbackReachable() {
         val file = File.createTempFile("rotation", ".png", context.cacheDir)
         val fixture = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888)
+        fixture.eraseColor(android.graphics.Color.GRAY)
         try {
             file.outputStream().use { assertTrue(fixture.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -51,6 +59,7 @@ class PhotoRotationTest {
                 }
                 scenario.recreate()
                 awaitNode { it.contentDescription == "所选照片预览" }
+                awaitNode(scrollControls = true) { it.text?.toString() == "检测完成，原图未修改。" }
                 lateinit var original: Bitmap
                 scenario.onActivity {
                     val model = ViewModelProvider(it)[PhotoViewModel::class.java]
@@ -73,9 +82,9 @@ class PhotoRotationTest {
                         val select = awaitNode { it.text?.toString() == "选择照片" }
                         assertTrue(Rect().also(select::getBoundsInScreen).right <= image.left)
                     }
-                    val controls = find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable }
-                    controls?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                    awaitNode { it.text?.toString() == "算法尚未接入，未生成修复结果。" }
+                    awaitNode(scrollControls = true) {
+                        it.text?.toString() == "未发现可修复的明确明暗横纹，未生成修复预览。"
+                    }
                     awaitNode { it.contentDescription == "所选照片预览" }
                     scenario.onActivity { assertSame(original, ViewModelProvider(it)[PhotoViewModel::class.java].bitmap) }
                 }

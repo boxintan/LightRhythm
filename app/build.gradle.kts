@@ -11,6 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.lightrhythm"
+        manifestPlaceholders["launcherLabel"] = "@string/app_name"
         minSdk = 26
         targetSdk = 37
         // CI builds increase monotonically so phones can install them as updates.
@@ -33,6 +34,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep algorithm verification separate from the team's installed application.
+            if (providers.gradleProperty("detectionVerification").orNull == "true") {
+                applicationIdSuffix = ".detectiontest"
+                manifestPlaceholders["launcherLabel"] = "光律联调版"
+            }
+        }
         release {
             optimization {
                 enable = true

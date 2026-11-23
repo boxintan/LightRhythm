@@ -41,6 +41,9 @@ internal fun PhotoImportRoute(model: PhotoViewModel, modifier: Modifier = Modifi
         processing = model.processing, processingMessage = model.processingMessage,
         repairedPreview = model.repairedPreview, decodeMs = model.decodeMs,
         saving = model.saving, saveMessage = model.saveMessage, modifier = modifier,
+        detecting = model.detecting, detection = model.detection, detectionError = model.detectionError,
+        showOriginal = model.showOriginal, onShowOriginalChange = model::showOriginal,
+        onDetectPhoto = model::detectAgain,
         onSelectPhoto = {
             try {
                 picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
@@ -61,25 +64,54 @@ internal fun PhotoImportRoute(model: PhotoViewModel, modifier: Modifier = Modifi
 
 // Stateless UI: member D can replace the layout without changing photo loading.
 @Composable
-fun PhotoImportScreen(
+internal fun PhotoImportScreen(
     bitmap: Bitmap?, loading: Boolean, error: String?,
     onSelectPhoto: () -> Unit, modifier: Modifier = Modifier,
     processing: Boolean = false, processingMessage: String? = null,
     repairedPreview: Bitmap? = null, decodeMs: Long? = null,
     saving: Boolean = false, saveMessage: String? = null,
     onSavePhoto: () -> Unit = {},
-    onProcessPhoto: () -> Unit = {}
+    onProcessPhoto: () -> Unit = {},
+    detecting: Boolean = false,
+    detection: TimedDetectionResult? = null,
+    detectionError: String? = null,
+    onDetectPhoto: () -> Unit = {},
+    showOriginal: Boolean = false,
+    onShowOriginalChange: (Boolean) -> Unit = {}
 ) {
+    val busy = loading || detecting || processing || saving
     val controls: @Composable (Modifier) -> Unit = { area ->
         Column(area.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
-            Text("导入本地照片 · 当前仅显示预览，尚未进行横纹修复")
-            Button(onClick = onSelectPhoto, enabled = !loading && !processing && !saving) { Text("选择照片") }
-            Button(onClick = onProcessPhoto, enabled = bitmap != null && !loading && !processing && !saving) {
+            Button(onClick = onSelectPhoto, enabled = !busy) { Text("选择照片") }
+            Button(onClick = onDetectPhoto, enabled = bitmap != null && !busy) {
+                Text(if (detection == null) "检测横纹" else "重新检测")
+            }
+            if (detecting) {
+                CircularProgressIndicator()
+                Text("正在检测横纹…")
+            }
+            detectionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            detection?.let { DetectionResultCard(it) }
+            Button(onClick = onProcessPhoto, enabled = bitmap != null && !busy) {
                 Text("生成修复预览")
             }
-            Button(onClick = onSavePhoto, enabled = bitmap != null && !loading && !processing && !saving) {
-                Text(if (saving) "正在保存…" else "保存预览副本")
+            if (repairedPreview != null) {
+                Text("修复前后对比", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(selected = showOriginal, onClick = { onShowOriginalChange(true) },
+                        enabled = !busy, label = { Text("原图") })
+                    FilterChip(selected = !showOriginal, onClick = { onShowOriginalChange(false) },
+                        enabled = !busy, label = { Text("修复图") })
+                }
+                Text(if (showOriginal) "当前显示：原图预览" else "当前显示：修复预览")
+            }
+            Button(onClick = onSavePhoto, enabled = bitmap != null && !busy) {
+                Text(when {
+                    saving -> "正在保存…"
+                    repairedPreview != null -> "保存修复副本"
+                    else -> "保存预览副本"
+                })
             }
             Text("保存当前预览尺寸的 PNG 副本，不覆盖原图。", style = MaterialTheme.typography.bodySmall)
             saveMessage?.let { Text(it) }
@@ -97,10 +129,11 @@ fun PhotoImportScreen(
             if (bitmap == null && !loading && error == null) Text("请选择一张照片开始。")
         }
     }
-    val photo = repairedPreview ?: bitmap
+    val showingRepair = repairedPreview != null && !showOriginal
+    val photo = if (showingRepair) repairedPreview else bitmap
     val preview: @Composable (Modifier) -> Unit = { area ->
         if (photo != null) Image(
-            photo.asImageBitmap(), if (repairedPreview != null) "修复预览" else "所选照片预览",
+            photo.asImageBitmap(), if (showingRepair) "修复预览" else "所选照片预览",
             area, contentScale = ContentScale.Fit
         )
     }
