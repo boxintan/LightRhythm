@@ -123,7 +123,7 @@ class BandingAnalysisTest {
         val result = analyze(imageRows { _, y -> if (y % 24 < 12) 90.0 else 160.0 })
         // 相同像素统计无法区分真实横纹与 LED 频闪；结果只能是疑似。
         assertEquals(BandingStatus.SUSPECTED, result.status)
-        assertEquals("row-periodicity-v1", result.algorithmVersion)
+        assertEquals("row-periodicity-v2", result.algorithmVersion)
     }
 
     @Test

@@ -43,7 +43,7 @@ class ColorBandingAnalysisTest {
             colorConfig = ColorDetectionConfig(enabled = false))
         assertFalse(result.isSuspected)
         assertNull(result.colorEvidence)
-        assertEquals("row-periodicity-v1", result.algorithmVersion)
+        assertEquals("row-periodicity-v2", result.algorithmVersion)
     }
 
     @Test fun constantTintAndSmoothColorGradientDoNotTrigger() {

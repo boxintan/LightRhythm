@@ -59,7 +59,7 @@ data class BandingResult(
     val candidateRowOffsets: List<Double>,
     val regions: List<RegionEvidence>,
     val config: DetectionConfig,
-    val algorithmVersion: String = "row-periodicity-v1",
+    val algorithmVersion: String = "row-periodicity-v2",
     /** Luminance fields above retain their original meaning even for a color-only candidate. */
     val colorEvidence: ColorBandingEvidence? = null,
 ) {

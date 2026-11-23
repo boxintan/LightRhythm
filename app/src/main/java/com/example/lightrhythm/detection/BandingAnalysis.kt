@@ -66,7 +66,16 @@ internal fun analyzeBandingProfiles(
             correlations[period] >= correlations[period - 1] &&
             correlations[period] > correlations[period + 1] &&
             // 半周期应有明暗反转，单纯平滑变化的高相关不足以作为周期证据。
-            correlations[period / 2] <= -0.15
+            correlations[period / 2] <= -0.15 &&
+            // A short repeating texture also correlates at 3x, 5x, ... its period.
+            // Do not allow these aliases to bypass the configured minimum period.
+            (2 until config.minPeriodRows).none { shorter ->
+                period % shorter == 0 &&
+                    correlations[shorter] >= config.minAutocorrelation &&
+                    correlations[shorter] >= correlations[period] - 0.03 &&
+                    correlations[shorter] >= correlations[shorter - 1] &&
+                    correlations[shorter] > correlations[shorter + 1]
+            }
     }
     if (candidates.isEmpty()) return result(BandingStatus.NO_CLEAR_PERIODICITY)
     val bestPeak = candidates.maxOf { correlations[it] }

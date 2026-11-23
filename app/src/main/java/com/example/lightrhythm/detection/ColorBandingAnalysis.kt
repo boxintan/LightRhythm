@@ -29,9 +29,9 @@ internal fun analyzeDetectionProfiles(
     val luminance = analyzeBandingProfiles(profiles.luminance.rows, profiles.luminance.widths, config)
     if (!colorConfig.enabled) return luminance
     val height = luminance.imageHeight
-    if (height < 64) return luminance.copy(algorithmVersion = "row-color-periodicity-v3")
+    if (height < 64) return luminance.copy(algorithmVersion = "row-color-periodicity-v4")
     val searchMaxLag = minOf(colorConfig.maxPeriodRows, height / colorConfig.minCycles)
-    if (searchMaxLag < config.minPeriodRows) return luminance.copy(algorithmVersion = "row-color-periodicity-v3")
+    if (searchMaxLag < config.minPeriodRows) return luminance.copy(algorithmVersion = "row-color-periodicity-v4")
     val radius = effectiveColorTrendRadius(height, colorConfig)
     val channels = listOf("R-G" to profiles.redGreen, "B-G" to profiles.blueGreen).map { (name, rows) ->
         val candidate = analyzeBandingProfiles(
@@ -43,6 +43,6 @@ internal fun analyzeDetectionProfiles(
     val evidence = ColorBandingEvidence(channels, colorConfig, luminance.status, radius, searchMaxLag)
     return luminance.copy(
         status = if (!luminance.isSuspected && evidence.isSuspected) BandingStatus.SUSPECTED_COLOR_BANDING else luminance.status,
-        algorithmVersion = "row-color-periodicity-v3", colorEvidence = evidence,
+        algorithmVersion = "row-color-periodicity-v4", colorEvidence = evidence,
     )
 }

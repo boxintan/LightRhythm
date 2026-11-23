@@ -1,4 +1,6 @@
-# 横纹检测接口草案 v3
+# 横纹检测接口草案 v4
+
+2026-11-23：补充低于最小周期的整数倍候选排除规则，防止短周期纹理绕过 minPeriodRows。字段及坐标不变，组合版本为 row-color-periodicity-v4，关闭颜色分支后的明暗版本为 row-periodicity-v2；以下 v3/v2 说明保留为历史接口演进。详见 [v4 检测验证](detection-v4-minimum-period.md)。
 
 选图对接更新：已在当前检测分支接通 PhotoImportRoute → PhotoDetectionPipeline → detectBanding → DetectionResultCard，基于最长边 1600 的预览图检测，页面展示对应分支周期和实际预览尺寸。19 项设备测试及实际系统选图检查通过。见 [App 检测对接](app-detection-integration.md)。
 
