@@ -128,6 +128,78 @@ internal object ChromaBandingRepair {
         return ChannelRepairOutcome(corrected, estimate, applied = true)
     }
 
+    /**
+     * Repairs using a period supplied by the detector instead of searching for one.
+     *
+     * This is the path that fits the team pipeline: A reports a colour-band period and B
+     * turns it into gains. Only the fit is done here, so A keeps ownership of detection.
+     * The correction is still refused when the supplied period explains no real colour
+     * modulation, which keeps a wrong detection from damaging the preview.
+     *
+     * @param periodPx period in rows, as reported by the detector.
+     */
+    fun repairWithPeriod(
+        planes: Array<FloatArray>,
+        width: Int,
+        height: Int,
+        periodPx: Double,
+        strength: Float = 1f,
+        axis: BandingAxis = BandingAxis.HORIZONTAL,
+    ): ChannelRepairOutcome {
+        require(planes.size == PLANES) { "expected R, G and B planes" }
+        require(width > 0 && height > 0) { "width and height must be positive" }
+        val needed = width * height
+        for (plane in planes) {
+            require(plane.size >= needed) { "plane has ${plane.size} values but $needed are required" }
+        }
+
+        val blend = strength.coerceIn(0f, 1f)
+        if (blend == 0f) return ChannelRepairOutcome(null, null, applied = false)
+
+        val horizontal = axis == BandingAxis.HORIZONTAL
+        val n = if (horizontal) height else width
+        // A requires at least two cycles; anything shorter cannot be fitted meaningfully.
+        if (n < 32 || !periodPx.isFinite()) return ChannelRepairOutcome(null, null, applied = false)
+        if (periodPx < MIN_PERIOD_PX || periodPx > n / 2.0) return ChannelRepairOutcome(null, null, applied = false)
+
+        val profiles = Array(PLANES) { channel ->
+            if (horizontal) rowProfile(planes[channel], width, height)
+            else columnProfile(planes[channel], width, height)
+        }
+        val logProfiles = Array(PLANES) { channel ->
+            val mean = profiles[channel].average()
+            if (mean <= EPS) return ChannelRepairOutcome(null, null, applied = false)
+            val floorValue = max(mean * 0.05, EPS)
+            DoubleArray(n) { ln(max(profiles[channel][it], floorValue)) }
+        }
+
+        val fundamental = 1.0 / periodPx
+        val redGreen = fitHarmonics(detrendLinear(DoubleArray(n) { i -> logProfiles[0][i] - logProfiles[1][i] }), fundamental)
+        val blueGreen = fitHarmonics(detrendLinear(DoubleArray(n) { i -> logProfiles[2][i] - logProfiles[1][i] }), fundamental)
+        val luma = fitHarmonics(detrend(DoubleArray(n) { i ->
+            (logProfiles[0][i] + logProfiles[1][i] + logProfiles[2][i]) / PLANES
+        }), fundamental)
+
+        val chromaAmplitude = max(redGreen.amplitude, blueGreen.amplitude)
+        val chromaLed = chromaAmplitude >= luma.amplitude
+        if (max(chromaAmplitude, luma.amplitude) < MIN_CHROMA_AMPLITUDE) {
+            return ChannelRepairOutcome(null, null, applied = false)
+        }
+
+        val gains = Array(PLANES) { channel -> gainCurve(logProfiles[channel], profiles[channel], fundamental) }
+        val corrected = Array(PLANES) { channel ->
+            applyGain(planes[channel], width, height, gains[channel], axis, blend)
+        }
+        val estimate = BandingEstimate(
+            axis = axis,
+            periodPx = periodPx,
+            amplitude = if (chromaLed) chromaAmplitude else luma.amplitude,
+            confidence = 1.0,
+            kind = if (chromaLed) BandingKind.CHROMATIC else BandingKind.LUMINANCE,
+        )
+        return ChannelRepairOutcome(corrected, estimate, applied = true)
+    }
+
     private class AxisAnalysis(
         val axis: BandingAxis,
         val periodPx: Double,

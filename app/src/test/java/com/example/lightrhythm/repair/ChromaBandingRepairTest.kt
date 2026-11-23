@@ -259,6 +259,76 @@ class ChromaBandingRepairTest {
     }
 
     @Test
+    fun repairsWithPeriodSuppliedByDetector() {
+        // The shape of the real pipeline: A reports 391 rows, B only fits.
+        val period = 391.0
+        val image = build(400, 1200, BandingAxis.HORIZONTAL, period, flatLumaDepths(-0.10, -0.15), base = 0.6)
+        val before = amplitudeAt(
+            profile(image.planes[0], image.width, image.height, BandingAxis.HORIZONTAL).let { r ->
+                val g = profile(image.planes[1], image.width, image.height, BandingAxis.HORIZONTAL)
+                DoubleArray(r.size) { r[it] - g[it] }
+            },
+            period,
+        )
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(
+            image.planes, image.width, image.height, period, axis = BandingAxis.HORIZONTAL,
+        )
+
+        assertTrue(outcome.applied)
+        assertEquals(BandingKind.CHROMATIC, outcome.estimate!!.kind)
+        assertEquals(period, outcome.estimate!!.periodPx, 0.0)
+
+        val after = amplitudeAt(
+            profile(outcome.planes!![0], image.width, image.height, BandingAxis.HORIZONTAL).let { r ->
+                val g = profile(outcome.planes!![1], image.width, image.height, BandingAxis.HORIZONTAL)
+                DoubleArray(r.size) { r[it] - g[it] }
+            },
+            period,
+        )
+        assertTrue("residual $after should be far below $before", after < before * 0.3)
+    }
+
+    @Test
+    fun suppliedPeriodDoesNothingWithoutModulation() {
+        // A detector false positive must not damage the preview.
+        val width = 300
+        val height = 900
+        val planes = Array(3) { FloatArray(width * height) { 0.5f } }
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(planes, width, height, 391.0)
+
+        assertFalse(outcome.applied)
+    }
+
+    @Test
+    fun rejectsUnresolvableSuppliedPeriod() {
+        val width = 300
+        val height = 600
+        val period = 500.0 // fewer than two cycles in 600 rows
+        val image = build(width, height, BandingAxis.HORIZONTAL, period, flatLumaDepths(-0.10, -0.15))
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(image.planes, width, height, period)
+
+        assertFalse("a period longer than half the axis has no usable cycles", outcome.applied)
+    }
+
+    @Test
+    fun suppliedPeriodRespectsStrength() {
+        val period = 300.0
+        val image = build(300, 900, BandingAxis.HORIZONTAL, period, flatLumaDepths(-0.10, -0.15))
+
+        val full = ChromaBandingRepair.repairWithPeriod(image.planes, 300, 900, period, strength = 1f)
+        val half = ChromaBandingRepair.repairWithPeriod(image.planes, 300, 900, period, strength = 0.5f)
+
+        assertTrue(full.applied)
+        assertTrue(half.applied)
+        val fullShifts = image.planes[0].indices.count { abs(image.planes[0][it] - full.planes!![0][it]) > 0.01f }
+        val halfShifts = image.planes[0].indices.count { abs(image.planes[0][it] - half.planes!![0][it]) > 0.01f }
+        assertTrue("half strength must change fewer pixels", halfShifts < fullShifts)
+    }
+
+    @Test
     fun falsePositivesStayBoundedOnColourfulScenes() {
         // Deliberately adversarial: smooth random colour fields with no periodic structure.
         // Long-period chroma banding and slow scene colour are intrinsically close, so a
