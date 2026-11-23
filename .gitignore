@@ -46,3 +46,7 @@ secrets.properties
 *.key
 *.p12
 *.pfx
+
+# Local evaluation photos, labels and generated reports
+datasets/local/
+evaluation-reports/

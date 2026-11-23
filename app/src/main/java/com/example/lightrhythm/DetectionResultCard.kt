@@ -1,0 +1,40 @@
+package com.example.lightrhythm
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.example.lightrhythm.model.BandingStatus
+
+@Composable
+internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modifier = Modifier) {
+    val result = detection.result
+    val color = result.colorEvidence?.channels
+        ?.filter { it.status == BandingStatus.SUSPECTED }
+        ?.maxByOrNull { it.score }
+    val heading = when (result.status) {
+        BandingStatus.SUSPECTED -> if (color != null) "疑似明暗横纹及颜色横带" else "疑似明暗横纹"
+        BandingStatus.SUSPECTED_COLOR_BANDING -> "疑似颜色横带"
+        BandingStatus.LOW_AMPLITUDE, BandingStatus.NO_CLEAR_PERIODICITY -> "未发现明确的周期横纹"
+        BandingStatus.INCONSISTENT_REGIONS -> "存在局部周期变化，暂不能确认横纹"
+        BandingStatus.INSUFFICIENT_DATA -> "图片尺寸不足，暂时无法判断"
+    }
+    Card(modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(heading, style = MaterialTheme.typography.titleMedium)
+            if (result.status == BandingStatus.SUSPECTED) {
+                result.candidatePeriodRows?.let { Text("明暗候选周期：$it 像素行") }
+            }
+            color?.candidatePeriodRows?.let { Text("颜色候选周期：$it 像素行") }
+            Text("基于预览图 ${result.imageWidth} × ${result.imageHeight} · 检测耗时 ${detection.elapsedMs} ms",
+                style = MaterialTheme.typography.bodySmall)
+            Text("检测完成，原图未修改。", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
