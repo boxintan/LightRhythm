@@ -7,19 +7,29 @@ import com.example.lightrhythm.model.ColorDetectionConfig
 
 /**
  * A 的检测入口：软件、不透明、方向正确的 Bitmap；由 C 在后台线程调用。
- * 仅读取输入，按四个纵向区域统计；输出是疑似周期条带证据，不确认 LED 成因。
+ * 仅读取输入，按四个纵向区域统计；不确认 LED 成因。
+ * assumeNeutralBackground 仅在调用方确认原画面应为白色/灰色时开启，用于非周期宽幅色带。
  */
 fun detectBanding(
     image: Bitmap,
     config: DetectionConfig = DetectionConfig(),
     colorConfig: ColorDetectionConfig = ColorDetectionConfig(),
+    assumeNeutralBackground: Boolean = false,
 ): BandingResult {
     require(!image.isRecycled) { "图片已经被释放" }
     require(image.config != Bitmap.Config.HARDWARE) { "请使用可读取像素的软件 Bitmap" }
     val statistics = readDetectionProfiles(image.width, image.height) { y, pixels ->
         image.getPixels(pixels, 0, image.width, 0, y, image.width, 1)
     }
-    return analyzeDetectionProfiles(statistics, config, colorConfig)
+    val periodic = analyzeDetectionProfiles(statistics, config, colorConfig)
+    if (!assumeNeutralBackground) return periodic
+    val broad = analyzeBroadColorBanding(image.width, image.height) { y, pixels ->
+        image.getPixels(pixels, 0, image.width, 0, y, image.width, 1)
+    }
+    return periodic.copy(
+        status = if (!periodic.isSuspected && broad != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_BROAD_COLOR_BAND else periodic.status,
+        broadColorEvidence = broad, algorithmVersion = "row-color-broad-v5",
+    )
 }
 
 internal data class RegionProfiles(val rows: List<DoubleArray>, val widths: List<Int>)
