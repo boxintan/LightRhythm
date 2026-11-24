@@ -355,6 +355,65 @@ class ChromaBandingRepairTest {
         return DoubleArray(r.size) { r[it] - g[it] }
     }
 
+    /** Slide-like scene: bright background with text rows every [textSpacing] pixels. */
+    private fun slideScene(
+        width: Int,
+        height: Int,
+        textSpacing: Int,
+        depths: DoubleArray,
+        bandPeriod: Double?,
+    ): Array<FloatArray> {
+        val planes = Array(3) { FloatArray(width * height) }
+        for (y in 0 until height) {
+            val textRow = y % textSpacing < 9
+            val wave = if (bandPeriod != null) sin(2.0 * PI * y / bandPeriod) else 0.0
+            for (x in 0 until width) {
+                val base = if (textRow) 0.35 else 0.82
+                val index = y * width + x
+                for (c in 0 until 3) {
+                    planes[c][index] = (base * (1.0 + depths[c] * wave)).toFloat().coerceIn(0f, 1f)
+                }
+            }
+        }
+        return planes
+    }
+
+    private fun gainProfile(before: FloatArray, after: FloatArray, width: Int, height: Int): DoubleArray {
+        val pre = profile(before, width, height, BandingAxis.HORIZONTAL)
+        val post = profile(after, width, height, BandingAxis.HORIZONTAL)
+        return DoubleArray(height) { if (pre[it] > 1e-6) post[it] / pre[it] else 1.0 }
+    }
+
+    @Test
+    fun autoDetectionDoesNotTurnSceneStructureIntoStripes() {
+        // Text every 127 px is close to the third harmonic of a 391 px band. Fitting harmonics
+        // turned the text into a ~10% fine ripple across the whole photo.
+        val width = 300
+        val height = 1200
+        val planes = slideScene(width, height, 127, flatLumaDepths(-0.10, -0.15), bandPeriod = 391.0)
+
+        val outcome = ChromaBandingRepair.repair(planes, width, height)
+
+        assertTrue(outcome.applied)
+        val gain = gainProfile(planes[0], outcome.planes!![0], width, height)
+        assertTrue(
+            "text rows must not become new stripes, ripple was ${amplitudeAt(gain, 127.0)}",
+            amplitudeAt(gain, 127.0) < 0.02,
+        )
+    }
+
+    @Test
+    fun suppliedPeriodRefusesASceneWithNoBanding() {
+        // A detector can report a period on ordinary content; the repair must stay out of it.
+        val width = 300
+        val height = 1200
+        val planes = slideScene(width, height, 127, doubleArrayOf(0.0, 0.0, 0.0), bandPeriod = null)
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(planes, width, height, 391.0)
+
+        assertFalse("a supplied period on a clean scene must not be applied", outcome.applied)
+    }
+
     @Test
     fun suppliedPeriodDoesNothingWithoutModulation() {
         // A detector false positive must not damage the preview.

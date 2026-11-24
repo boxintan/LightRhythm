@@ -54,6 +54,17 @@ internal object ChromaBandingRepair {
      */
     private const val MIN_CHROMA_AMPLITUDE = 0.006
 
+    /**
+     * Share of the chroma residual the supplied period must explain before we act on it.
+     * Measured on a slide-like scene: no banding 0.00, colour banding 0.89-0.92, and the
+     * field capture 0.81. Without this gate a scene with text rows was "repaired" at a
+     * detector-reported period.
+     */
+    private const val MIN_REPAIR_EXPLAINED = 0.35
+
+    /** Luminance-only repair at a long period: scene structure is broadband, so be stricter. */
+    private const val MIN_LUMA_REPAIR_EXPLAINED = 0.5
+
     /** Luminance path keeps the conservative gates from [BandingRepair]. */
     private const val MIN_LUMA_RATIO = 15.0
     private const val MAX_LUMA_PERIOD_PX = 64.0
@@ -78,6 +89,17 @@ internal object ChromaBandingRepair {
     private const val MIN_STRIP_PHASE_COHERENCE = 0.75
 
     private const val MAX_HARMONICS = 3
+
+    /**
+     * Above this period only the fundamental is fitted.
+     *
+     * Harmonics of a long period land in the 60-200 px range, where slide text, table rows and
+     * other scene structure live. Fitting them let a 391 px band pick up text rows at 130 px
+     * and re-apply them as a 10% ripple over the whole photo. A projector's bands are close to
+     * sinusoidal anyway, so the harmonics buy little and cost artefacts. Short periods keep
+     * them, where a PWM waveform can be genuinely non-sinusoidal.
+     */
+    private const val HARMONICS_PERIOD_CUTOFF_PX = 128.0
     private const val GAIN_MIN = 0.5
     private const val GAIN_MAX = 2.0
     private const val EPS = 1e-6
@@ -195,8 +217,16 @@ internal object ChromaBandingRepair {
         )
 
         val chromaAmplitude = max(redGreen.amplitude, blueGreen.amplitude)
+        val chromaExplained = max(redGreen.explainedFraction, blueGreen.explainedFraction)
         val chromaLed = chromaAmplitude >= luma.amplitude
-        if (max(chromaAmplitude, luma.amplitude) < MIN_CHROMA_AMPLITUDE) {
+        // Amplitude alone is not enough: a scene with text or table rows already shows 0.009 in
+        // the luminance profile at a long period. The share of residual energy explained at the
+        // period is what separates a real wave (0.8-0.9) from scene structure (0.00-0.02).
+        val strongChroma = chromaAmplitude >= MIN_CHROMA_AMPLITUDE &&
+            chromaExplained >= MIN_REPAIR_EXPLAINED
+        val strongLuma = luma.amplitude >= MIN_CHROMA_AMPLITUDE &&
+            luma.explainedFraction >= MIN_LUMA_REPAIR_EXPLAINED
+        if (!strongChroma && !strongLuma) {
             return ChannelRepairOutcome(null, null, applied = false)
         }
 
@@ -281,7 +311,8 @@ internal object ChromaBandingRepair {
         var confidence = 0.0
 
         if (chromaPeak != null) {
-            val chromaFit = fitHarmonics(chromaResidual, chromaPeak.frequency)
+            val chromaPeriod = 1.0 / chromaPeak.frequency
+            val chromaFit = fitHarmonics(chromaResidual, chromaPeak.frequency, harmonicsFor(chromaPeriod))
             val chromaAmplitude = chromaFit.amplitude
             if (chromaPeak.ratio >= MIN_CHROMA_RATIO &&
                 chromaAmplitude >= MIN_CHROMA_AMPLITUDE &&
@@ -289,7 +320,7 @@ internal object ChromaBandingRepair {
                 coherentAcrossStrips(planes, width, height, axis, chromaPeak.frequency, chromaSignalIndex)
             ) {
                 kind = BandingKind.CHROMATIC
-                period = 1.0 / chromaPeak.frequency
+                period = chromaPeriod
                 ratio = chromaPeak.ratio
                 amplitude = chromaAmplitude
                 confidence = (chromaPeak.ratio / (chromaPeak.ratio + MIN_CHROMA_RATIO)).coerceIn(0.0, 1.0)
@@ -297,7 +328,7 @@ internal object ChromaBandingRepair {
         }
 
         if (kind == null && lumaPeak.period <= MAX_LUMA_PERIOD_PX && lumaPeak.ratio >= MIN_LUMA_RATIO) {
-            val lumaFit = fitHarmonics(lumaResidual, lumaPeak.frequency)
+            val lumaFit = fitHarmonics(lumaResidual, lumaPeak.frequency, harmonicsFor(lumaPeak.period))
             if (lumaFit.explainedFraction >= MIN_LUMA_EXPLAINED && lumaFit.amplitude >= MIN_CHROMA_AMPLITUDE) {
                 kind = BandingKind.LUMINANCE
                 period = lumaPeak.period
@@ -311,8 +342,9 @@ internal object ChromaBandingRepair {
         if (period !in MIN_PERIOD_PX..MAX_PERIOD_PX) return null
 
         val fundamental = 1.0 / period
+        val harmonics = harmonicsFor(period)
         val gains = Array(PLANES) { channel ->
-            gainCurve(logProfiles[channel], profiles[channel], fundamental)
+            gainCurve(logProfiles[channel], profiles[channel], fundamental, harmonics)
         }
         return AxisAnalysis(axis, period, amplitude, confidence, resolvedKind, gains, ratio)
     }
@@ -450,6 +482,10 @@ internal object ChromaBandingRepair {
      * Fits the fundamental and up to two harmonics to a log profile and returns the
      * multiplier that removes them.
      */
+    /** Long periods are fitted with the fundamental alone; see [HARMONICS_PERIOD_CUTOFF_PX]. */
+    private fun harmonicsFor(periodPx: Double): Int =
+        if (periodPx > HARMONICS_PERIOD_CUTOFF_PX) 1 else MAX_HARMONICS
+
     private fun gainCurve(
         logProfile: DoubleArray,
         profile: DoubleArray,
