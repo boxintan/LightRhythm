@@ -8,7 +8,7 @@ data class MoireTile(val x: Int, val y: Int, val size: Int, val channel: String,
     val dx: Int, val dy: Int, val recurrenceDisplacementPixels: Double, val correlation: Double)
 
 data class MoireResult(val tiles: List<MoireTile>, val testedTiles: Int,
-    val algorithmVersion: String = "local-chroma-recurrence-v1") {
+    val algorithmVersion: String = "local-chroma-recurrence-v2") {
     // Repeated chroma in several spatial cells is a cue, including straight color stripes.
     // A single image cannot establish whether those stripes belong to the source content.
     val isSuspected: Boolean get() = tiles.size >= 3
@@ -21,7 +21,7 @@ fun detectMoire(image: Bitmap): MoireResult {
     }
 }
 
-/** Sixteen spatial cells, two native-resolution tile sizes; no full-image pixel copy. */
+/** Sixteen spatial cells, three native-resolution tile sizes; no full-image pixel copy. */
 internal fun analyzeMoire(width: Int, height: Int, readRow: (Int, IntArray) -> Unit): MoireResult {
     if (width < 256 || height < 256) return MoireResult(emptyList(), 0)
     val tiles = mutableListOf<MoireTile>()
@@ -29,7 +29,10 @@ internal fun analyzeMoire(width: Int, height: Int, readRow: (Int, IntArray) -> U
     val directions = listOf(0 to 1, 1 to 0, 1 to 1, -1 to 1, 1 to 2, -1 to 2, 2 to 1, -2 to 1)
     for (gy in 0..3) for (gx in 0..3) {
       var cellBest: MoireTile? = null
-      for (size in listOf(64, 128)) {
+      for (size in listOf(32, 64, 128)) {
+        // Small windows follow changing fringe curvature after preview downscaling.
+        // Denser sampling avoids relying on a sparse sublattice of their few pixels.
+        val sampleStep = when (size) { 32 -> 1; 64 -> 2; else -> 3 }
         val center = (size - 1) / 2.0
         val left = ((width - size) * (gx + 0.5) / 4).toInt()
         val top = ((height - size) * (gy + 0.5) / 4).toInt()
@@ -77,7 +80,7 @@ internal fun analyzeMoire(width: Int, height: Int, readRow: (Int, IntArray) -> U
             for ((dx, dy) in directions) {
                 fun correlation(lag: Int): Double {
                     var ab = 0.0; var aa = 0.0; var bb = 0.0; var count = 0
-                    for (y in 0 until size step 3) for (x in 0 until size step 3) {
+                    for (y in 0 until size step sampleStep) for (x in 0 until size step sampleStep) {
                         val xx = x+dx*lag; val yy = y+dy*lag
                         if (xx !in 0 until size || yy !in 0 until size) continue
                         val va = values[y*size+x]; val vb = values[yy*size+xx]
