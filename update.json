@@ -1,0 +1,10 @@
+{
+  "applicationId": "com.example.lightrhythm.preview",
+  "versionCode": 100020,
+  "versionName": "1.0.preview.20",
+  "minSdk": 26,
+  "apkUrl": "https://github.com/boxintan/LightRhythm/releases/download/team-preview-20-1/LightRhythm-preview.apk",
+  "sha256": "0ee6c7dd7aeb748c07b7429cc9cfd14f5882ffbab4e35f916556ae7db049a303",
+  "sizeBytes": 12092896,
+  "notes": "光律预览版，包含 team-preview 分支的待合并改动。"
+}
