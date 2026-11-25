@@ -31,6 +31,9 @@ internal object BandingPhotoProcessor : PhotoProcessor {
             val colourResult = repairColorBanding(source, colorEvidence, strength, context)
             if (colourResult is ProcessingResult.Preview) return colourResult
         }
+        if (detection.localBandingEvidence != null) {
+            return ProcessingResult.NotApplied("局部或倾斜横纹暂不支持修复，未生成修复预览。")
+        }
         if (detectMoire(source).isSuspected) {
             return ProcessingResult.NotApplied("疑似摩尔纹暂不支持修复，未生成修复预览。")
         }
