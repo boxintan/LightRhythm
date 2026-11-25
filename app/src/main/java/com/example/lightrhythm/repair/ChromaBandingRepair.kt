@@ -230,7 +230,7 @@ internal object ChromaBandingRepair {
             return ChannelRepairOutcome(null, null, applied = false)
         }
 
-        val gains = Array(PLANES) { channel -> gainCurve(logProfiles[channel], profiles[channel], fundamental, 1) }
+        val gains = Array(PLANES) { channel -> gainCurve(detrend(logProfiles[channel]), profiles[channel], fundamental, 1) }
         val corrected = Array(PLANES) { channel ->
             applyGain(planes[channel], width, height, gains[channel], axis, blend)
         }
@@ -344,7 +344,7 @@ internal object ChromaBandingRepair {
         val fundamental = 1.0 / period
         val harmonics = harmonicsFor(period)
         val gains = Array(PLANES) { channel ->
-            gainCurve(logProfiles[channel], profiles[channel], fundamental, harmonics)
+            gainCurve(detrend(logProfiles[channel]), profiles[channel], fundamental, harmonics)
         }
         return AxisAnalysis(axis, period, amplitude, confidence, resolvedKind, gains, ratio)
     }
@@ -487,13 +487,12 @@ internal object ChromaBandingRepair {
         if (periodPx > HARMONICS_PERIOD_CUTOFF_PX) 1 else MAX_HARMONICS
 
     private fun gainCurve(
-        logProfile: DoubleArray,
+        residual: DoubleArray,
         profile: DoubleArray,
         fundamental: Double,
         maxHarmonics: Int = MAX_HARMONICS,
     ): DoubleArray {
-        val n = logProfile.size
-        val residual = detrend(logProfile)
+        val n = residual.size
         val fit = fitHarmonics(residual, fundamental, maxHarmonics)
         if (fit.frequencies.isEmpty()) return DoubleArray(n) { 1.0 }
 
@@ -515,14 +514,18 @@ internal object ChromaBandingRepair {
     }
 
     /**
-     * Searches +/-6% around [reported] for the period that carries the most colour modulation.
-     * A few percent of mismatch is enough to leave a visible residual wave on a 3-cycle frame.
+     * Searches +/-15% around [reported] for the period that carries the most colour modulation.
+     *
+     * A few percent of mismatch leaves a visible residual wave on a 3-cycle frame, and the
+     * detector's estimate is not always centred: an error of -10% left 18% residual when the
+     * search only reached -6%. The amplitude-versus-period curve has one clear maximum at the
+     * true period, so widening the search is safe.
      */
     private fun refinePeriod(reported: Double, n: Int, vararg signals: DoubleArray): Double {
         var best = reported
         var bestEnergy = -1.0
-        var factor = 0.94
-        while (factor <= 1.0601) {
+        var factor = 0.85
+        while (factor <= 1.1501) {
             val candidate = reported * factor
             if (candidate >= MIN_PERIOD_PX && candidate <= n / 2.0) {
                 var energy = 0.0
@@ -535,7 +538,7 @@ internal object ChromaBandingRepair {
                     best = candidate
                 }
             }
-            factor += 0.004
+            factor += 0.005
         }
         return best
     }

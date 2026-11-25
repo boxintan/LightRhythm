@@ -349,6 +349,23 @@ class ChromaBandingRepairTest {
         assertTrue("a 5% period error must still be corrected, residual $after vs $before", after < before * 0.25)
     }
 
+    @Test
+    fun refinesALargeUnderestimateFromTheDetector() {
+        // A's estimate is not always centred; -10% used to leave 18% residual because the
+        // local search only reached -6%.
+        val width = 300
+        val height = 1200
+        val truePeriod = 391.0
+        val image = build(width, height, BandingAxis.HORIZONTAL, truePeriod, flatLumaDepths(-0.10, -0.15), base = 0.6)
+        val before = amplitudeAt(chromaOf(image.planes, width, height), truePeriod)
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(image.planes, width, height, 352.0)
+        assertTrue(outcome.applied)
+
+        val after = amplitudeAt(chromaOf(outcome.planes!!, width, height), truePeriod)
+        assertTrue("a 10% underestimate must still be corrected, residual $after vs $before", after < before * 0.2)
+    }
+
     private fun chromaOf(planes: Array<FloatArray>, width: Int, height: Int): DoubleArray {
         val r = profile(planes[0], width, height, BandingAxis.HORIZONTAL)
         val g = profile(planes[1], width, height, BandingAxis.HORIZONTAL)
