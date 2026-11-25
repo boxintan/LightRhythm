@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     topBar = {
-                        if (BuildConfig.APPLICATION_ID == UPDATABLE_APPLICATION_ID) {
+                        if (isUpdatableBuild) {
                             AppUpdateBar(updateModel)
                         }
                     }

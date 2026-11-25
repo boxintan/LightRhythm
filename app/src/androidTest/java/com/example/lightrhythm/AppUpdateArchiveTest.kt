@@ -19,8 +19,7 @@ class AppUpdateArchiveTest {
         info.versionName ?: "test", "https://example.com/app.apk", "0".repeat(64), 1, 26, "") }
 
     @Before fun requiresUpdatablePackage() {
-        assumeTrue("Update archive validation applies to the team's normal app ID",
-            context.packageName == UPDATABLE_APPLICATION_ID)
+        assumeTrue("Update archive validation applies to published builds", isUpdatableBuild)
     }
 
     @Test fun acceptsInstalledApkWithMatchingPackageVersionAndSigner() {

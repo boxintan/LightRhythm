@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val teamPreview = providers.gradleProperty("teamPreview").orNull == "true"
+
 android {
     namespace = "com.example.lightrhythm"
     compileSdk {
@@ -17,8 +19,12 @@ android {
         // CI builds increase monotonically so phones can install them as updates.
         versionCode = providers.gradleProperty("ciVersionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("ciVersionName").orNull ?: "1.0"
-        val updateUrl = providers.gradleProperty("updateMetadataUrl").orNull
-            ?: "https://github.com/boxintan/LightRhythm/releases/latest/download/update.json"
+        val defaultUpdateUrl = if (teamPreview) {
+            "https://raw.githubusercontent.com/boxintan/LightRhythm/team-preview-download/update.json"
+        } else {
+            "https://github.com/boxintan/LightRhythm/releases/latest/download/update.json"
+        }
+        val updateUrl = providers.gradleProperty("updateMetadataUrl").orNull ?: defaultUpdateUrl
         require(updateUrl.startsWith("https://") && updateUrl.none { it == '"' || it == '\\' || it.isWhitespace() })
         buildConfigField("String", "UPDATE_METADATA_URL", "\"$updateUrl\"")
 
@@ -35,10 +41,17 @@ android {
 
     buildTypes {
         debug {
-            // Keep algorithm verification separate from the team's installed application.
-            if (providers.gradleProperty("detectionVerification").orNull == "true") {
-                applicationIdSuffix = ".detectiontest"
-                manifestPlaceholders["launcherLabel"] = "光律联调版"
+            when {
+                teamPreview -> {
+                    applicationIdSuffix = ".preview"
+                    manifestPlaceholders["launcherLabel"] = "光律预览版"
+                    // The preview publishing job signs the APK after checking its package name.
+                    signingConfig = null
+                }
+                providers.gradleProperty("detectionVerification").orNull == "true" -> {
+                    applicationIdSuffix = ".detectiontest"
+                    manifestPlaceholders["launcherLabel"] = "光律联调版"
+                }
             }
         }
         release {

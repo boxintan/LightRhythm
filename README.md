@@ -34,9 +34,20 @@ JSON 格式参见 Release 附件 `update.json`；把其中的 `apkUrl` 改为国
 
 如果手机上旧版由其他成员的电脑独立签名，首次换用团队测试版可能提示签名不一致；此时需卸载旧版后安装一次（会清除旧版的本地应用数据）。之后可以直接覆盖更新。
 
+## 合并前用手机试预览版
+
+[光律预览版下载页](https://github.com/boxintan/LightRhythm/blob/team-preview-download/README.md)
+
+1. 在自己的功能分支提交代码，发 PR 到 `main` 供评审。需要真机测试时，将同一功能分支合入共享的 `team-preview` 分支并推送，或另开一个以 `team-preview` 为目标的 PR。
+2. 等 GitHub Actions 的 `Android build and phone download` 成功，用手机打开上面的下载页。可以在页面核对当前预览的提交和构建记录。
+3. 首次安装后，手机上会多出「光律预览版」，可与 `main` 版同时使用。以后从预览版内点击「检查更新」，或重新打开固定下载页。
+4. 验证通过后，把原来指向 `main` 的功能 PR 正常合并。团队用 `team-preview` 作为共享候选版，同一时间下载页提供一个包。
+
+预览下载页和版本信息由 Actions 更新，首次发布成功后链接生效。手机下载仍需能访问 GitHub。
+
 ### 自动打包维护说明
 
-- `.github/workflows/android.yml`：PR 只检查编译和测试；只有 `main` 的成功构建才发布手机安装包。
+- `.github/workflows/android.yml`：PR 只检查编译和测试；`main` 发布原来的固定下载包，`team-preview` 使用独立包名并发布为 GitHub 预发行版。
 - `LIGHTRHYTHM_DEBUG_KEYSTORE_B64`：仓库 Actions Secret，保存固定的 Android 调试签名文件，不能放进源码。维护者换密钥后，旧版可能无法直接覆盖更新。
 - `ciVersionCode` 和 `ciVersionName`：CI 传入的版本信息；本地构建仍默认为 `1 / 1.0`。
 - GitHub Release 明确标记为团队测试版，保留每次成功发布的包；固定下载链接始终指向最新成功版本。

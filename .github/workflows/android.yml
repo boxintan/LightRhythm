@@ -2,7 +2,7 @@ name: Android build and phone download
 
 on:
   push:
-    branches: [main]
+    branches: [main, team-preview]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -18,8 +18,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TEAM_PREVIEW: ${{ github.ref == 'refs/heads/team-preview' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -44,10 +48,18 @@ jobs:
           echo "LIGHTRHYTHM_DEBUG_KEYSTORE_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
       - name: Build APK and run unit tests
         run: |
+          preview_args=()
+          if [ "$TEAM_PREVIEW" = true ]; then
+            preview_args+=(-PteamPreview=true)
+          fi
           bash ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain \
             -PciVersionCode="$((100000 + GITHUB_RUN_NUMBER))" \
-            -PciVersionName="1.0.preview.${GITHUB_RUN_NUMBER}"
+            -PciVersionName="1.0.preview.${GITHUB_RUN_NUMBER}" "${preview_args[@]}"
           mkdir -p dist
+          if [ "$TEAM_PREVIEW" = true ]; then
+            cp app/build/outputs/apk/debug/app-debug-unsigned.apk dist/LightRhythm-preview-unsigned.apk
+            exit 0
+          fi
           cp app/build/outputs/apk/debug/app-debug.apk dist/LightRhythm.apk
           (cd dist && sha256sum LightRhythm.apk > LightRhythm.apk.sha256)
           python3 scripts/create_update_manifest.py \
@@ -114,3 +126,54 @@ jobs:
             dist/LightRhythm.apk dist/LightRhythm.apk.sha256 dist/update.json
           gh release edit "$tag" --draft=false --latest
           echo '手机下载：https://github.com/boxintan/LightRhythm/releases/latest/download/LightRhythm.apk' >> "$GITHUB_STEP_SUMMARY"
+
+  publish-team-preview:
+    needs: build
+    if: github.ref == 'refs/heads/team-preview' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'build-tools;36.0.0'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: LightRhythm-apk
+          path: dist
+      - name: Verify preview package and sign it
+        env:
+          KEYSTORE_B64: ${{ secrets.LIGHTRHYTHM_DEBUG_KEYSTORE_B64 }}
+        run: |
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          unsigned=dist/LightRhythm-preview-unsigned.apk
+          signed=dist/LightRhythm-preview.apk
+          if [ "$("$build_tools/aapt2" dump packagename "$unsigned")" != 'com.example.lightrhythm.preview' ]; then
+            echo 'Refusing to sign a non-preview package.' >&2
+            exit 1
+          fi
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo 'Missing LIGHTRHYTHM_DEBUG_KEYSTORE_B64 repository secret.' >&2
+            exit 1
+          fi
+          umask 077
+          keystore="$(mktemp)"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$keystore"
+          "$build_tools/apksigner" sign --ks "$keystore" --ks-key-alias androiddebugkey \
+            --ks-pass pass:android --key-pass pass:android --out "$signed" "$unsigned"
+          expected='78d4131af5c44c09b775aa22efc29cd5c158514619061a2bab5a79675698d014'
+          actual="$("$build_tools/apksigner" verify --print-certs "$signed" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          if [ "$actual" != "$expected" ]; then
+            echo 'Signing certificate mismatch; refusing to publish an incompatible update.' >&2
+            exit 1
+          fi
+      - name: Publish preview and update the phone download page
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/publish_team_preview.sh

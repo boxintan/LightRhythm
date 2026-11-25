@@ -1,18 +1,24 @@
 package com.example.lightrhythm
 
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 class AppUpdateTest {
+    @Before fun requiresUpdatablePackage() {
+        assumeTrue("Update tests apply to published builds", isUpdatableBuild)
+    }
+
     private val apk = "downloaded APK test bytes".toByteArray()
     private val sha = MessageDigest.getInstance("SHA-256").digest(apk)
         .joinToString("") { "%02x".format(it.toInt() and 255) }
 
     private fun metadata() = AppUpdateMetadata(
-        "com.example.lightrhythm", 100123, "1.0.preview.123",
+        BuildConfig.APPLICATION_ID, 100123, "1.0.preview.123",
         "https://example.com/LightRhythm.apk", sha, apk.size.toLong(), 26, "测试",
     )
 
@@ -29,6 +35,15 @@ class AppUpdateTest {
         assertThrows(IllegalArgumentException::class.java) { metadata().copy(apkUrl = "https://user:password@example.com/app.apk") }
         assertThrows(IllegalArgumentException::class.java) { metadata().copy(sha256 = "not-a-hash") }
         assertThrows(IllegalArgumentException::class.java) { metadata().copy(sizeBytes = MAX_UPDATE_BYTES + 1) }
+    }
+
+    @Test fun rejectsUpdatesFromTheOtherChannel() {
+        val otherChannel = if (BuildConfig.APPLICATION_ID.endsWith(".preview")) {
+            "com.example.lightrhythm"
+        } else {
+            "com.example.lightrhythm.preview"
+        }
+        assertThrows(IllegalArgumentException::class.java) { metadata().copy(applicationId = otherChannel) }
     }
 
     @Test fun verifiesFullDownloadAndReportsCompletion() {
