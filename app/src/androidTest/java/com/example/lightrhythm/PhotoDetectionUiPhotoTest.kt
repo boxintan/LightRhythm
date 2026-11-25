@@ -23,12 +23,12 @@ class PhotoDetectionUiPhotoTest {
         assumeTrue("Provide detectionSampleDirectory for private-photo UI regressions", directory != null)
         val file = File(directory!!, name)
         val before = file.readBytes()
-        compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("疑似颜色横带").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("疑似颜色横带").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("颜色候选周期：$period 像素行").assertExists()
         compose.onNodeWithText("基于预览图 1600 × 1200", substring = true).assertExists()
-        compose.onNodeWithContentDescription("所选照片预览").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("所选照片预览").assertIsDisplayed()
         compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
         assertArrayEquals(before, file.readBytes())
     }

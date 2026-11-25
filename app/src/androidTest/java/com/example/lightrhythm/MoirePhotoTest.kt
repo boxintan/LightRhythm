@@ -53,7 +53,7 @@ class MoirePhotoTest {
     private fun verifyCandidate(name: String) {
         val file = sample(name)
         val before = file.readBytes()
-        compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
         compose.waitUntil(15_000) { compose.onAllNodesWithText("疑似摩尔纹").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("疑似摩尔纹").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("生成修复预览").performScrollTo().performClick()

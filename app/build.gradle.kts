@@ -11,12 +11,26 @@ android {
 
     defaultConfig {
         applicationId = "com.example.lightrhythm"
+        manifestPlaceholders["launcherLabel"] = "@string/app_name"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // CI builds increase monotonically so phones can install them as updates.
+        versionCode = providers.gradleProperty("ciVersionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("ciVersionName").orNull ?: "1.0"
+        val updateUrl = providers.gradleProperty("updateMetadataUrl").orNull
+            ?: "https://github.com/boxintan/LightRhythm/releases/latest/download/update.json"
+        require(updateUrl.startsWith("https://") && updateUrl.none { it == '"' || it == '\\' || it.isWhitespace() })
+        buildConfigField("String", "UPDATE_METADATA_URL", "\"$updateUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            providers.environmentVariable("LIGHTRHYTHM_DEBUG_KEYSTORE_PATH").orNull?.let {
+                storeFile = file(it)
+            }
+        }
     }
 
     buildTypes {
@@ -24,6 +38,7 @@ android {
             // Keep algorithm verification separate from the team's installed application.
             if (providers.gradleProperty("detectionVerification").orNull == "true") {
                 applicationIdSuffix = ".detectiontest"
+                manifestPlaceholders["launcherLabel"] = "光律联调版"
             }
         }
         release {
@@ -39,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

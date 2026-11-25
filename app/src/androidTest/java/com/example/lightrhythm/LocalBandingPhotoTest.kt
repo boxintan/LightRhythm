@@ -18,7 +18,7 @@ class LocalBandingPhotoTest {
         assumeTrue("Provide private samples", directory != null)
         val file = File(directory!!,"09.jpg")
         val before = file.readBytes()
-        compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
         compose.waitUntil(15_000) { compose.onAllNodesWithText("疑似局部横纹").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("疑似局部横纹").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("亮度候选周期",substring = true).assertDoesNotExist()

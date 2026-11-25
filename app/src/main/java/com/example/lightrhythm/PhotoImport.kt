@@ -11,169 +11,57 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
-import android.os.SystemClock
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 
 @Composable
-fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = null) {
-    val context = LocalContext.current.applicationContext
-    var selectedUri by rememberSaveable { mutableStateOf(initialPhotoUri) }
-    var selectionVersion by rememberSaveable { mutableStateOf(0) }
-    var neutralBackground by rememberSaveable { mutableStateOf(false) }
-    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var processing by remember { mutableStateOf(false) }
-    var processingMessage by remember { mutableStateOf<String?>(null) }
-    var repairedPreview by remember { mutableStateOf<Bitmap?>(null) }
-    var decodeMs by remember { mutableStateOf<Long?>(null) }
-    var detecting by remember { mutableStateOf(false) }
-    var detection by remember { mutableStateOf<TimedDetectionResult?>(null) }
-    var detectionError by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    var saving by remember { mutableStateOf(false) }
-    var saveMessage by remember { mutableStateOf<String?>(null) }
-    val saveCurrentPreview: () -> Unit = {
-        val preview = repairedPreview ?: bitmap
-        if (preview != null && !loading && !processing && !saving && !detecting) {
-            saving = true
-            saveMessage = null
-            scope.launch {
-                try {
-                    savePhotoPreview(context, preview)
-                    saveMessage = "预览副本已保存到相册 Pictures/LightRhythm（${preview.width} × ${preview.height}）"
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    saveMessage = "保存失败，请检查可用空间和存储权限后重试。"
-                } finally {
-                    saving = false
-                }
-            }
-        }
-    }
-    val writePermission = rememberLauncherForActivityResult(RequestPermission()) { granted ->
-        if (granted) saveCurrentPreview()
-        else saveMessage = "未获得保存权限，未保存副本。照片导入仍可使用。"
-    }
-    val pipeline = remember { PhotoProcessingPipeline(BandingPhotoProcessor) }
-    val detectionPipeline = remember(neutralBackground) {
-        PhotoDetectionPipeline { com.example.lightrhythm.detection.detectBanding(it, assumeNeutralBackground = neutralBackground) }
+internal fun PhotoImportRoute(model: PhotoViewModel, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(RequestPermission()) { granted ->
+        if (granted) model.save() else model.permissionDenied()
     }
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
-        // Cancelling preserves the previous selection.
-        if (uri != null) {
-            selectedUri = uri.toString()
-            selectionVersion++
-        }
+        uri?.let(model::select)
     }
-    LaunchedEffect(selectedUri, selectionVersion, neutralBackground) {
-        val uri = selectedUri ?: return@LaunchedEffect
-        val requestVersion = selectionVersion
-        loading = true
-        error = null
-        bitmap = null
-        repairedPreview = null
-        processingMessage = null
-        saveMessage = null
-        decodeMs = null
-        detection = null
-        detectionError = null
-        detecting = false
-        val started = SystemClock.elapsedRealtime()
-        try {
-            val decoded = withContext(Dispatchers.IO) { decodePhotoPreview(context, Uri.parse(uri)) }
-            bitmap = decoded
-            decodeMs = SystemClock.elapsedRealtime() - started
-            loading = false
-            detecting = true
-            detection = detectionPipeline.run(decoded)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            if (bitmap == null) error = "无法读取照片，请重新选择手机上的本地照片。"
-            else detectionError = "无法检测这张照片，请重试或选择不透明的 JPG、PNG 照片。"
-        } finally {
-            if (selectedUri == uri && selectionVersion == requestVersion) {
-                loading = false
-                detecting = false
+    PhotoImportScreen(
+        bitmap = model.bitmap, loading = model.loading, error = model.error,
+        processing = model.processing, processingMessage = model.processingMessage,
+        repairedPreview = model.repairedPreview, decodeMs = model.decodeMs,
+        saving = model.saving, saveMessage = model.saveMessage, modifier = modifier,
+        detecting = model.detecting, detection = model.detection, detectionError = model.detectionError,
+        showOriginal = model.showOriginal, onShowOriginalChange = model::showOriginal,
+        onDetectPhoto = model::detectAgain,
+        neutralBackground = model.neutralBackground,
+        onNeutralBackgroundChange = model::changeNeutralBackground,
+        onSelectPhoto = {
+            try {
+                picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+            } catch (_: android.content.ActivityNotFoundException) {
+                model.pickerUnavailable()
             }
-        }
-    }
-    PhotoImportScreen(bitmap, loading, error, {
-        try {
-            picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
-        } catch (_: android.content.ActivityNotFoundException) {
-            error = "系统没有可用的照片选择器。"
-        }
-    }, modifier, processing, processingMessage, repairedPreview, decodeMs,
-        saving = saving, saveMessage = saveMessage, onSavePhoto = {
+        },
+        onSavePhoto = {
             if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(
                     context, Manifest.permission.WRITE_EXTERNAL_STORAGE
                 ) != PackageManager.PERMISSION_GRANTED) {
-                writePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            } else saveCurrentPreview()
-        }, detecting = detecting, detection = detection, detectionError = detectionError,
-        onDetectPhoto = { selectionVersion++ }, neutralBackground = neutralBackground,
-        onNeutralBackgroundChange = { neutralBackground = it; selectionVersion++ }) {
-        val source = bitmap ?: return@PhotoImportScreen
-        if (detection?.result?.localBandingEvidence != null) {
-            processingMessage = "局部或倾斜横纹暂不支持修复，未生成修复预览。"
-            return@PhotoImportScreen
-        }
-        if (detection?.moire?.isSuspected == true) {
-            processingMessage = "疑似摩尔纹暂不支持修复，未生成修复预览。"
-            return@PhotoImportScreen
-        }
-        if (detection?.result?.broadColorEvidence != null) {
-            processingMessage = "宽幅颜色横带暂不支持修复，未生成修复预览。"
-            return@PhotoImportScreen
-        }
-        if (!processing) {
-            processing = true
-            processingMessage = null
-            repairedPreview = null
-            scope.launch {
-                try {
-                    val timed = pipeline.run(source, strength = 1f)
-                    when (val result = timed.result) {
-                        ProcessingResult.NotIntegrated ->
-                            processingMessage = "修复算法尚未接入，未生成修复结果。"
-                        is ProcessingResult.NotApplied -> processingMessage = result.message
-                        is ProcessingResult.Preview -> {
-                            repairedPreview = result.bitmap
-                            processingMessage = "修复预览耗时：${timed.elapsedMs} ms"
-                        }
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    processingMessage = "处理失败，请重试。原始照片未被修改。"
-                } finally {
-                    processing = false
-                }
-            }
-        }
-    }
+                permission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            } else model.save()
+        },
+        onProcessPhoto = model::process
+    )
 }
 
 // Stateless UI: member D can replace the layout without changing photo loading.
@@ -185,69 +73,90 @@ internal fun PhotoImportScreen(
     repairedPreview: Bitmap? = null, decodeMs: Long? = null,
     saving: Boolean = false, saveMessage: String? = null,
     onSavePhoto: () -> Unit = {},
+    onProcessPhoto: () -> Unit = {},
     detecting: Boolean = false,
     detection: TimedDetectionResult? = null,
     detectionError: String? = null,
     onDetectPhoto: () -> Unit = {},
     neutralBackground: Boolean = false,
     onNeutralBackgroundChange: (Boolean) -> Unit = {},
-    onProcessPhoto: () -> Unit = {}
+    showOriginal: Boolean = false,
+    onShowOriginalChange: (Boolean) -> Unit = {}
 ) {
-    val busy = loading || processing || saving || detecting
-    var showOriginal by remember(bitmap, repairedPreview) { mutableStateOf(false) }
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
-        Text("选择照片后自动检测横纹，可查看候选周期。")
-        Button(onClick = onSelectPhoto, enabled = !busy) { Text("选择照片") }
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Checkbox(checked = neutralBackground, onCheckedChange = onNeutralBackgroundChange, enabled = !busy)
-            Text("原画面应为白色或灰色（检测宽幅色带）")
-        }
-        Button(onClick = onDetectPhoto, enabled = bitmap != null && !busy) {
-            Text(if (detection == null) "检测横纹" else "重新检测")
-        }
-        if (detecting) {
-            CircularProgressIndicator()
-            Text("正在检测横纹…")
-        }
-        detectionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        detection?.let { DetectionResultCard(it) }
-        Button(onClick = onProcessPhoto, enabled = bitmap != null && !busy) {
-            Text("生成修复预览")
-        }
-        Button(onClick = onSavePhoto, enabled = bitmap != null && !busy) {
-            Text(if (saving) "正在保存…" else if (repairedPreview != null) "保存修复副本" else "保存预览副本")
-        }
-        Text(if (repairedPreview != null) "保存修复预览尺寸的 PNG 副本，不覆盖原图。" else "保存当前预览尺寸的 PNG 副本，不覆盖原图。", style = MaterialTheme.typography.bodySmall)
-        saveMessage?.let { Text(it) }
-        decodeMs?.let { Text("照片读取耗时：$it ms（不含修复）") }
-        processingMessage?.let { Text(it) }
-        if (processing) {
-            CircularProgressIndicator()
-            Text("正在处理…")
-        }
-        if (loading) {
-            CircularProgressIndicator()
-            Text("正在读取照片…")
-        }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (bitmap != null) {
+    val busy = loading || detecting || processing || saving
+    val controls: @Composable (Modifier) -> Unit = { area ->
+        Column(area.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("光律 LightRhythm", style = MaterialTheme.typography.headlineSmall)
+            Button(onClick = onSelectPhoto, enabled = !busy) { Text("选择照片") }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked = neutralBackground, onCheckedChange = onNeutralBackgroundChange, enabled = !busy)
+                Text("原画面应为白色或灰色（检测宽幅色带）")
+            }
+            Button(onClick = onDetectPhoto, enabled = bitmap != null && !busy) {
+                Text(if (detection == null) "检测横纹" else "重新检测")
+            }
+            if (detecting) {
+                CircularProgressIndicator()
+                Text("正在检测横纹…")
+            }
+            detectionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            detection?.let { DetectionResultCard(it) }
+            Button(onClick = onProcessPhoto, enabled = bitmap != null && !busy) {
+                Text("生成修复预览")
+            }
             if (repairedPreview != null) {
                 Text("修复前后对比", style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilterChip(selected = showOriginal, onClick = { showOriginal = true },
+                    FilterChip(selected = showOriginal, onClick = { onShowOriginalChange(true) },
                         enabled = !busy, label = { Text("原图") })
-                    FilterChip(selected = !showOriginal, onClick = { showOriginal = false },
+                    FilterChip(selected = !showOriginal, onClick = { onShowOriginalChange(false) },
                         enabled = !busy, label = { Text("修复图") })
                 }
                 Text(if (showOriginal) "当前显示：原图预览" else "当前显示：修复预览")
             }
-            val showRepair = repairedPreview != null && !showOriginal
-            Image((if (showRepair) repairedPreview!! else bitmap).asImageBitmap(),
-                if (showRepair) "修复预览" else "所选照片预览",
-                Modifier.fillMaxWidth().height(320.dp), contentScale = ContentScale.Fit)
-        } else if (!loading && error == null) {
-            Text("请选择一张照片开始。原始照片不会被修改。")
+            Button(onClick = onSavePhoto, enabled = bitmap != null && !busy) {
+                Text(when {
+                    saving -> "正在保存…"
+                    repairedPreview != null -> "保存修复副本"
+                    else -> "保存预览副本"
+                })
+            }
+            Text("保存当前预览尺寸的 PNG 副本，不覆盖原图。", style = MaterialTheme.typography.bodySmall)
+            saveMessage?.let { Text(it) }
+            decodeMs?.let { Text("照片读取耗时：$it ms（不含修复）") }
+            processingMessage?.let { Text(it) }
+            if (processing) {
+                CircularProgressIndicator()
+                Text("正在处理…")
+            }
+            if (loading) {
+                CircularProgressIndicator()
+                Text("正在读取照片…")
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (bitmap == null && !loading && error == null) Text("请选择一张照片开始。")
+        }
+    }
+    val showingRepair = repairedPreview != null && !showOriginal
+    val photo = if (showingRepair) repairedPreview else bitmap
+    val preview: @Composable (Modifier) -> Unit = { area ->
+        if (photo != null) Image(
+            photo.asImageBitmap(), if (showingRepair) "修复预览" else "所选照片预览",
+            area, contentScale = ContentScale.Fit
+        )
+    }
+    BoxWithConstraints(modifier.fillMaxSize().padding(16.dp)) {
+        if (maxWidth > maxHeight && photo != null) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                controls(Modifier.weight(1f).fillMaxHeight())
+                preview(Modifier.weight(1.3f).fillMaxHeight())
+            }
+        } else {
+            val controlHeight = if (photo == null) maxHeight else maxHeight * 0.62f
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                controls(Modifier.fillMaxWidth().heightIn(max = controlHeight))
+                preview(Modifier.fillMaxWidth().weight(1f))
+            }
         }
     }
 }

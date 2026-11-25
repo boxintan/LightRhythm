@@ -1,7 +1,18 @@
 package com.example.lightrhythm
 
+import android.content.ContentUris
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.os.Build
+import android.provider.MediaStore
 import android.net.Uri
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
+import androidx.lifecycle.ViewModelProvider
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
@@ -43,7 +54,7 @@ class PhotoDetectionIntegrationTest {
         val file = colorSample()
         val before = file.readBytes()
         try {
-            compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+            compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
             awaitText("疑似颜色横带")
             compose.onNodeWithText("疑似颜色横带").performScrollTo().assertIsDisplayed()
             compose.onNodeWithText("颜色候选周期：", substring = true).assertExists()
@@ -62,7 +73,7 @@ class PhotoDetectionIntegrationTest {
 
     @Test fun unreadableSelectionShowsReadErrorAndNoDetectionResult() {
         val missing = File(context.cacheDir, "missing-${System.nanoTime()}.jpg")
-        compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(missing).toString()) } }
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(missing)) } }
         awaitText("无法读取照片")
         compose.onNodeWithText("选择照片").assertIsEnabled()
         compose.onNodeWithText("检测横纹", substring = false).assertIsNotEnabled()
@@ -81,19 +92,53 @@ class PhotoDetectionIntegrationTest {
         try {
             file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             val before = file.readBytes()
-            compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+            compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
             awaitText("疑似明暗横纹")
             compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
             awaitText("修复预览耗时：")
-            compose.onNodeWithContentDescription("修复预览").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithContentDescription("修复预览").assertIsDisplayed()
             compose.onNodeWithText("原图", substring = false).performScrollTo().performClick().assertIsSelected()
-            compose.onNodeWithContentDescription("所选照片预览").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithContentDescription("所选照片预览").assertIsDisplayed()
             compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
             compose.onNodeWithText("保存修复副本").assertExists()
+            if (Build.VERSION.SDK_INT >= 29) verifySavedRepair()
             compose.onNodeWithText("修复图", substring = false).performScrollTo().performClick().assertIsSelected()
-            compose.onNodeWithContentDescription("修复预览").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithContentDescription("修复预览").assertIsDisplayed()
             assertArrayEquals(before, file.readBytes())
         } finally { bitmap.recycle(); file.delete() }
+    }
+
+    // Saving while viewing the original must still export the corrected preview.
+    private fun verifySavedRepair() {
+        val resolver = context.contentResolver
+        val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        fun ownCopies(): Set<Uri> = buildSet {
+            resolver.query(
+                collection, arrayOf(MediaStore.Images.Media._ID),
+                "${MediaStore.Images.Media.OWNER_PACKAGE_NAME}=? AND ${MediaStore.Images.Media.RELATIVE_PATH}=?",
+                arrayOf(context.packageName, "Pictures/LightRhythm/"), null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) add(ContentUris.withAppendedId(collection, cursor.getLong(0)))
+            }
+        }
+        val before = ownCopies()
+        try {
+            compose.onNodeWithText("保存修复副本").performScrollTo().performClick()
+            awaitText("预览副本已保存")
+            val exported = (ownCopies() - before).single()
+            val bitmap = resolver.openInputStream(exported)?.use { BitmapFactory.decodeStream(it) }
+            checkNotNull(bitmap)
+            try {
+                assertEquals(65, bitmap.width)
+                assertEquals(512, bitmap.height)
+                val rows = (0 until bitmap.height).map { Color.red(bitmap.getPixel(0, it)) }
+                assertTrue("Expected attenuation of the 38-level stripe swing", rows.max() - rows.min() < 12)
+            } finally {
+                bitmap.recycle()
+            }
+        } finally {
+            (ownCopies() - before).forEach { resolver.delete(it, null, null) }
+        }
     }
 
     @Test fun unsupportedTransparencyKeepsPreviewAndAllowsRetry() {
@@ -101,7 +146,7 @@ class PhotoDetectionIntegrationTest {
         val file = File.createTempFile("transparent-detection-", ".png", context.cacheDir)
         try {
             file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-            compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+            compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
             awaitText("无法检测这张照片")
             compose.onNodeWithContentDescription("所选照片预览").assertExists()
             compose.onNodeWithText("检测横纹", substring = false).assertIsEnabled()
@@ -160,4 +205,13 @@ class PhotoDetectionIntegrationTest {
             assertTrue(timed.elapsedMs >= 0)
         } finally { bitmap.recycle() }
     }
+}
+
+/** Feeds a fixture through the same activity-owned state as the picker, without opening system UI. */
+@Composable
+internal fun PhotoImportWithSample(uri: Uri) {
+    val owner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner())
+    val model = remember(owner) { ViewModelProvider(owner)[PhotoViewModel::class.java] }
+    LaunchedEffect(model, uri) { model.select(uri) }
+    PhotoImportRoute(model)
 }

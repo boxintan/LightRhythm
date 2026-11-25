@@ -20,7 +20,7 @@ class BroadColorPhotoTest {
         assumeTrue("Provide private samples", directory != null)
         val file = File(directory!!, name)
         val before = file.readBytes()
-        compose.setContent { MaterialTheme { PhotoImportRoute(initialPhotoUri = Uri.fromFile(file).toString()) } }
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("未发现明确的周期横纹").fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(isToggleable()).performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("疑似宽幅色带").fetchSemanticsNodes().isNotEmpty() }
