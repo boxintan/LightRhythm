@@ -21,12 +21,15 @@ internal enum class BandingAxis { HORIZONTAL, VERTICAL }
  * @param periodPx distance between two consecutive bright (or dark) bands.
  * @param amplitude relative modulation depth in log space (0.1 means roughly +/-10% brightness).
  * @param confidence spectral peak-to-median ratio; higher means more reliable detection.
+ * @param kind whether the banding lives in brightness or in the colour channels. Luminance
+ *   banding can use [BandingRepair.repair]; chromatic banding needs [ChromaBandingRepair].
  */
 internal data class BandingEstimate(
     val axis: BandingAxis,
     val periodPx: Double,
     val amplitude: Double,
     val confidence: Double,
+    val kind: BandingKind = BandingKind.LUMINANCE,
 )
 
 internal data class RepairOutcome(
