@@ -16,7 +16,9 @@ fun main(args: Array<String>) {
                 drawImage(original, 0, 0, image.width, image.height, null); dispose()
             }
             val start = System.nanoTime()
-            val result = analyzeMoire(image.width, image.height) { y, row -> image.getRGB(0, y, image.width, 1, row, 0, image.width) }
+            val result = analyzeMoireTiles(image.width, image.height) { left, top, width, height, pixels ->
+                image.getRGB(left, top, width, height, pixels, 0, width)
+            }
             println("${File(path).name} ${image.width}x${image.height}: suspected=${result.isSuspected} tiles=${result.tiles.size} ms=${(System.nanoTime()-start)/1000000}")
             println(result.tiles.joinToString { "${it.size}px:${it.channel}:${it.dx},${it.dy}/${"%.1f".format(java.util.Locale.ROOT,it.recurrenceDisplacementPixels)}" })
             image.flush()

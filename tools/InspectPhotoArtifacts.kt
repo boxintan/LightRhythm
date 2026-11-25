@@ -7,7 +7,7 @@ import javax.imageio.ImageIO
 
 /** Development diagnostics only: resizing variants are not independent validation samples. */
 fun main(args: Array<String>) {
-    println("file,width,height,banding,periodRows,moire,moireCells,localCells")
+    println("file,width,height,banding,periodRows,moire,moireCells,localCells,localSize,localPeriodRows")
     for (path in args) {
         val original = ImageIO.read(File(path)) ?: error("Cannot decode $path")
         try {
@@ -24,10 +24,13 @@ fun main(args: Array<String>) {
                         dispose()
                     }
                     val reader: (Int, IntArray) -> Unit = { y, row -> image.getRGB(0, y, image.width, 1, row, 0, image.width) }
-                    val banding = analyzeImageBanding(image.width, image.height, readRow = reader)
-                    val moire = analyzeMoire(image.width, image.height, reader)
+                    val tileReader: PixelTileReader = { left, top, width, height, pixels ->
+                        image.getRGB(left, top, width, height, pixels, 0, width)
+                    }
+                    val banding = analyzeImageBanding(image.width, image.height, readTile = tileReader, readRow = reader)
+                    val moire = analyzeMoireTiles(image.width, image.height, tileReader)
                     val local = banding.localBandingEvidence
-                    println("${File(path).name},${image.width},${image.height},${banding.status},${banding.candidatePeriodRows},${moire.isSuspected},${moire.tiles.size},${local?.tiles?.size ?: 0}")
+                    println("${File(path).name},${image.width},${image.height},${banding.status},${banding.candidatePeriodRows},${moire.isSuspected},${moire.tiles.size},${local?.tiles?.size ?: 0},${local?.tiles?.firstOrNull()?.size ?: ""},${local?.tiles?.map { it.periodRows }?.sorted()?.joinToString(";") ?: ""}")
                 } finally { image.flush() }
             }
         } finally { original.flush() }

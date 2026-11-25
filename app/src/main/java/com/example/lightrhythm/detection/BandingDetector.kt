@@ -18,7 +18,10 @@ fun detectBanding(
 ): BandingResult {
     require(!image.isRecycled) { "图片已经被释放" }
     require(image.config != Bitmap.Config.HARDWARE) { "请使用可读取像素的软件 Bitmap" }
-    return analyzeImageBanding(image.width, image.height, config, colorConfig, assumeNeutralBackground) { y, pixels ->
+    val tileReader: PixelTileReader = { left, top, width, height, pixels ->
+        image.getPixels(pixels, 0, width, left, top, width, height)
+    }
+    return analyzeImageBanding(image.width, image.height, config, colorConfig, assumeNeutralBackground, tileReader) { y, pixels ->
         image.getPixels(pixels, 0, image.width, 0, y, image.width, 1)
     }
 }
@@ -26,18 +29,20 @@ fun detectBanding(
 /** Shared pixel-reader entry for Bitmap and desktop evaluation; coordinates remain input pixels. */
 internal fun analyzeImageBanding(width: Int, height: Int,
     config: DetectionConfig = DetectionConfig(), colorConfig: ColorDetectionConfig = ColorDetectionConfig(),
-    assumeNeutralBackground: Boolean = false, readRow: (Int, IntArray) -> Unit): BandingResult {
+    assumeNeutralBackground: Boolean = false, readTile: PixelTileReader? = null,
+    readRow: (Int, IntArray) -> Unit): BandingResult {
     val original = analyzeDetectionProfiles(readDetectionProfiles(width, height, readRow), config, colorConfig)
-    val local = if (!original.isSuspected) analyzeLocalBanding(width, height, config, readRow) else null
+    val local = if (!original.isSuspected) analyzeLocalBandingTiles(width, height, config,
+        readTile ?: rowTileReader(width, readRow)) else null
     val periodic = original.copy(
         status = if (!original.isSuspected && local != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_LOCAL_BANDING else original.status,
-        localBandingEvidence = local, algorithmVersion = "row-local-periodicity-v6",
+        localBandingEvidence = local, algorithmVersion = "row-local-periodicity-v7",
     )
     if (!assumeNeutralBackground) return periodic
     val broad = analyzeBroadColorBanding(width, height, readRow)
     return periodic.copy(
         status = if (!periodic.isSuspected && broad != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_BROAD_COLOR_BAND else periodic.status,
-        broadColorEvidence = broad, algorithmVersion = "row-local-broad-v6",
+        broadColorEvidence = broad, algorithmVersion = "row-local-broad-v7",
     )
 }
 

@@ -1,4 +1,6 @@
-# 横纹检测接口 v6
+# 横纹检测接口 v7
+
+2026-11-25 更新：像素入口版本为 `row-local-periodicity-v7`（确认中性背景时 `row-local-broad-v7`）。局部回退先检查 128 像素窗口，失败后独立检查 64 窗口，不累加尺度票数。`LocalStripeTile.sourceMarginRows` 分别为 16/8，读取范围须使用返回值；`LocalBandingEvidence.testedCells` 是所选尺度的空间位置数。公开函数和原有字段含义不变。摩尔纹版本为 `local-chroma-recurrence-v4`，仅优化矩形像素读取，候选判据保持。详见 [本轮验证](detection-tile-scale-v7.md)。以下为历史演进记录。
 
 2026-11-25：Bitmap 与桌面像素入口已增加局部/倾斜条纹回退，版本 `row-local-periodicity-v6`；确认中性原内容时为 `row-local-broad-v6`。新增 `SUSPECTED_LOCAL_BANDING` 与 `localBandingEvidence`，计入 `isSuspected`。旧行统计字段仍表示整行结果，局部结果必须读取独立证据，不能据此执行整行修复。底层 `analyzeDetectionProfiles` 的 v4 语义不变。详见 [本轮接口与照片验证](local-stripes-and-moire-v3.md)。下文保留历史演进记录。
 

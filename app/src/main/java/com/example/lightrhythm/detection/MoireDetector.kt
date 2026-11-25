@@ -8,7 +8,7 @@ data class MoireTile(val x: Int, val y: Int, val size: Int, val channel: String,
     val dx: Int, val dy: Int, val recurrenceDisplacementPixels: Double, val correlation: Double)
 
 data class MoireResult(val tiles: List<MoireTile>, val testedTiles: Int,
-    val algorithmVersion: String = "local-chroma-recurrence-v3") {
+    val algorithmVersion: String = "local-chroma-recurrence-v4") {
     // Repeated chroma in several spatial cells is a cue, including straight color stripes.
     // A single image cannot establish whether those stripes belong to the source content.
     val isSuspected: Boolean get() = tiles.size >= 3
@@ -16,16 +16,20 @@ data class MoireResult(val tiles: List<MoireTile>, val testedTiles: Int,
 
 fun detectMoire(image: Bitmap): MoireResult {
     require(!image.isRecycled && image.config != Bitmap.Config.HARDWARE)
-    return analyzeMoire(image.width, image.height) { y, row ->
-        image.getPixels(row, 0, image.width, 0, y, image.width, 1)
+    return analyzeMoireTiles(image.width, image.height) { left, top, width, height, pixels ->
+        image.getPixels(pixels, 0, width, left, top, width, height)
     }
 }
 
 /** Sixteen spatial cells, four native-resolution tile sizes; no full-image pixel copy. */
 internal fun analyzeMoire(width: Int, height: Int, readRow: (Int, IntArray) -> Unit): MoireResult {
+    return analyzeMoireTiles(width, height, rowTileReader(width, readRow))
+}
+
+/** Reads only each required rectangle; Bitmap callers avoid thousands of full-width reads. */
+internal fun analyzeMoireTiles(width: Int, height: Int, readTile: PixelTileReader): MoireResult {
     if (width < 256 || height < 256) return MoireResult(emptyList(), 0)
     val tiles = mutableListOf<MoireTile>()
-    val row = IntArray(width)
     val directions = listOf(0 to 1, 1 to 0, 1 to 1, -1 to 1, 1 to 2, -1 to 2, 2 to 1, -2 to 1)
     for (gy in 0..3) for (gx in 0..3) {
       var cellBest: MoireTile? = null
@@ -37,11 +41,12 @@ internal fun analyzeMoire(width: Int, height: Int, readRow: (Int, IntArray) -> U
         val left = ((width - size) * (gx + 0.5) / 4).toInt()
         val top = ((height - size) * (gy + 0.5) / 4).toInt()
         val channels = Array(2) { DoubleArray(size * size) { Double.NaN } }
+        val pixels = IntArray(size * size)
+        readTile(left, top, size, size, pixels)
         var valid = 0
         for (y in 0 until size) {
-            readRow(top + y, row)
             for (x in 0 until size) {
-                val p = row[left + x]
+                val p = pixels[y * size + x]
                 val r = (p ushr 16) and 255; val g = (p ushr 8) and 255; val b = p and 255
                 if (p ushr 24 != 255 || minOf(r, g, b) < 50 || maxOf(r, g, b) - minOf(r, g, b) > 100) continue
                 val sum = (r + g + b).toDouble()
