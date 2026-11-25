@@ -27,6 +27,7 @@ enum class BandingStatus {
     /** Color-only candidate; consult colorEvidence, do not use luminance row offsets for repair. */
     SUSPECTED_COLOR_BANDING,
     SUSPECTED_BROAD_COLOR_BAND,
+    SUSPECTED_LOCAL_BANDING,
 }
 
 /** x 范围为 [startX, endXExclusive)，均使用输入图片坐标。 */
@@ -61,12 +62,14 @@ data class BandingResult(
     val regions: List<RegionEvidence>,
     val config: DetectionConfig,
     val algorithmVersion: String = "row-periodicity-v2",
-    /** Luminance fields above retain their original meaning even for a color-only candidate. */
+    /** Luminance fields above retain their meaning even for color-only or local candidates. */
     val colorEvidence: ColorBandingEvidence? = null,
     val broadColorEvidence: BroadColorEvidence? = null,
+    val localBandingEvidence: LocalBandingEvidence? = null,
 ) {
     val isSuspected: Boolean get() = status == BandingStatus.SUSPECTED ||
-        status == BandingStatus.SUSPECTED_COLOR_BANDING || status == BandingStatus.SUSPECTED_BROAD_COLOR_BAND
+        status == BandingStatus.SUSPECTED_COLOR_BANDING || status == BandingStatus.SUSPECTED_BROAD_COLOR_BAND ||
+        status == BandingStatus.SUSPECTED_LOCAL_BANDING
 }
 
 /** Only populated when the caller confirms the source content should be white/gray. */

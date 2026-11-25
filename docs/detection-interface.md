@@ -1,4 +1,6 @@
-# 横纹检测接口草案 v4
+# 横纹检测接口 v6
+
+2026-11-25：Bitmap 与桌面像素入口已增加局部/倾斜条纹回退，版本 `row-local-periodicity-v6`；确认中性原内容时为 `row-local-broad-v6`。新增 `SUSPECTED_LOCAL_BANDING` 与 `localBandingEvidence`，计入 `isSuspected`。旧行统计字段仍表示整行结果，局部结果必须读取独立证据，不能据此执行整行修复。底层 `analyzeDetectionProfiles` 的 v4 语义不变。详见 [本轮接口与照片验证](local-stripes-and-moire-v3.md)。下文保留历史演进记录。
 
 摩尔纹检测现有独立接口 `detectMoire(Bitmap): MoireResult`，不更改本接口的周期和状态语义。App 并行展示两类结果，摩尔纹候选禁止送入横纹修复。实现范围与照片验证见 [彩色摩尔纹检测](moire-detection.md)。
 

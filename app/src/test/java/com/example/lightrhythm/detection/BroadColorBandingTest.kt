@@ -32,4 +32,11 @@ class BroadColorBandingTest {
     @Test fun insufficientVisibleBackgroundDoesNotTrigger() {
         assertNull(detect { _, _ -> pixel(10,10,10) })
     }
+    @Test fun combinedImageEntryStillRequiresNeutralSourceConfirmation() {
+        fun combined(neutral: Boolean) = analyzeImageBanding(256,256,assumeNeutralBackground = neutral) { y,row ->
+            for (x in row.indices) row[x] = broad(y)
+        }
+        assertNull(combined(false).broadColorEvidence)
+        assertNotNull(combined(true).broadColorEvidence)
+    }
 }

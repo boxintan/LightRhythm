@@ -40,4 +40,12 @@ class MoireScaleRegressionTest {
         }
         assertFalse(result.isSuspected)
     }
+
+    @Test fun fineChromaWithChangingSpacingRetainsEvidence() {
+        val result = analyze { x, y ->
+            val wave = (14 * sin(2 * PI * ((y - x*0.25)/6.0 + y*y/25000.0))).toInt()
+            rgb(185 + wave, 185, 185 - wave)
+        }
+        assertTrue(result.isSuspected)
+    }
 }

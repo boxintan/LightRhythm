@@ -19,6 +19,8 @@ class MoirePhotoTest {
     @get:Rule val compose = createComposeRule()
     @Test fun photo07ShowsCandidateAndBlocksBandingRepair() = verifyCandidate("07.jpg")
     @Test fun photo08ShowsCandidateAndBlocksBandingRepair() = verifyCandidate("08.jpg")
+    @Test fun photo10ShowsCandidateAndBlocksBandingRepair() = verifyCandidate("10.jpg")
+    @Test fun photo12ShowsCandidateAndBlocksBandingRepair() = verifyCandidate("12.jpg")
     @Test fun photos07And08RetainCandidatesAt960() {
         assumeTrue("ImageDecoder requires Android 9 or newer", Build.VERSION.SDK_INT >= 28)
         val context = InstrumentationRegistry.getInstrumentation().targetContext

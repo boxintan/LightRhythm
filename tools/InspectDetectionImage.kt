@@ -9,13 +9,13 @@ fun main(args: Array<String>) {
     require(args.size == 1) { "请传入一张本地图片路径" }
     val image = ImageIO.read(File(args[0])) ?: error("无法解码图片")
     val start = System.nanoTime()
-    val statistics = readDetectionProfiles(image.width, image.height) { y, pixels ->
+    val result = analyzeImageBanding(image.width, image.height) { y, pixels ->
         image.getRGB(0, y, image.width, 1, pixels, 0, image.width)
     }
-    val result = analyzeDetectionProfiles(statistics)
     val elapsedMs = (System.nanoTime() - start) / 1_000_000.0
     println("SAMPLE_DIAGNOSTICS (desktop pixels, not Android device validation)")
     println("width=${result.imageWidth}, height=${result.imageHeight}, status=${result.status}")
+    println("localStripeCells=${result.localBandingEvidence?.tiles?.size ?: 0}")
     println(String.format(Locale.ROOT,
         "score=%.6f, periodRows=%s, rms=%.6f, autocorrelation=%.6f, regionSupport=%.6f, desktopMs=%.3f",
         result.score, result.candidatePeriodRows, result.rmsAmplitude,

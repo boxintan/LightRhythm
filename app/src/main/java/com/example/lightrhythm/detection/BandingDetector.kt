@@ -18,17 +18,26 @@ fun detectBanding(
 ): BandingResult {
     require(!image.isRecycled) { "图片已经被释放" }
     require(image.config != Bitmap.Config.HARDWARE) { "请使用可读取像素的软件 Bitmap" }
-    val statistics = readDetectionProfiles(image.width, image.height) { y, pixels ->
+    return analyzeImageBanding(image.width, image.height, config, colorConfig, assumeNeutralBackground) { y, pixels ->
         image.getPixels(pixels, 0, image.width, 0, y, image.width, 1)
     }
-    val periodic = analyzeDetectionProfiles(statistics, config, colorConfig)
+}
+
+/** Shared pixel-reader entry for Bitmap and desktop evaluation; coordinates remain input pixels. */
+internal fun analyzeImageBanding(width: Int, height: Int,
+    config: DetectionConfig = DetectionConfig(), colorConfig: ColorDetectionConfig = ColorDetectionConfig(),
+    assumeNeutralBackground: Boolean = false, readRow: (Int, IntArray) -> Unit): BandingResult {
+    val original = analyzeDetectionProfiles(readDetectionProfiles(width, height, readRow), config, colorConfig)
+    val local = if (!original.isSuspected) analyzeLocalBanding(width, height, config, readRow) else null
+    val periodic = original.copy(
+        status = if (!original.isSuspected && local != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_LOCAL_BANDING else original.status,
+        localBandingEvidence = local, algorithmVersion = "row-local-periodicity-v6",
+    )
     if (!assumeNeutralBackground) return periodic
-    val broad = analyzeBroadColorBanding(image.width, image.height) { y, pixels ->
-        image.getPixels(pixels, 0, image.width, 0, y, image.width, 1)
-    }
+    val broad = analyzeBroadColorBanding(width, height, readRow)
     return periodic.copy(
         status = if (!periodic.isSuspected && broad != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_BROAD_COLOR_BAND else periodic.status,
-        broadColorEvidence = broad, algorithmVersion = "row-color-broad-v5",
+        broadColorEvidence = broad, algorithmVersion = "row-local-broad-v6",
     )
 }
 

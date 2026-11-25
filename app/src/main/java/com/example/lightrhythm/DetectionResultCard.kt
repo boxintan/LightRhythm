@@ -22,6 +22,7 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
         BandingStatus.SUSPECTED -> if (color != null) "疑似明暗横纹及颜色横带" else "疑似明暗横纹"
         BandingStatus.SUSPECTED_COLOR_BANDING -> "疑似颜色横带"
         BandingStatus.SUSPECTED_BROAD_COLOR_BAND -> "疑似宽幅色带"
+        BandingStatus.SUSPECTED_LOCAL_BANDING -> "疑似局部横纹"
         BandingStatus.LOW_AMPLITUDE, BandingStatus.NO_CLEAR_PERIODICITY -> "未发现明确的周期横纹"
         BandingStatus.INCONSISTENT_REGIONS -> "存在局部周期变化，暂不能确认横纹"
         BandingStatus.INSUFFICIENT_DATA -> "图片尺寸不足，暂时无法判断"
@@ -29,6 +30,9 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(heading, style = MaterialTheme.typography.titleMedium)
+            result.localBandingEvidence?.let {
+                Text("多个局部区域存在重复明暗条纹，可能有倾斜或只覆盖部分画面；暂不支持这类条纹的修复。")
+            }
             detection.moire?.let { moire ->
                 Text(when {
                     moire.testedTiles == 0 -> "图片尺寸不足，暂无法检测摩尔纹"

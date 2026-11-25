@@ -136,6 +136,10 @@ fun PhotoImportRoute(modifier: Modifier = Modifier, initialPhotoUri: String? = n
         onDetectPhoto = { selectionVersion++ }, neutralBackground = neutralBackground,
         onNeutralBackgroundChange = { neutralBackground = it; selectionVersion++ }) {
         val source = bitmap ?: return@PhotoImportScreen
+        if (detection?.result?.localBandingEvidence != null) {
+            processingMessage = "局部或倾斜横纹暂不支持修复，未生成修复预览。"
+            return@PhotoImportScreen
+        }
         if (detection?.moire?.isSuspected == true) {
             processingMessage = "疑似摩尔纹暂不支持修复，未生成修复预览。"
             return@PhotoImportScreen

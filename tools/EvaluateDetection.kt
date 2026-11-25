@@ -53,10 +53,9 @@ internal fun evaluateSample(sample: EvaluationSample): EvaluationRecord = try {
     val image = ImageIO.read(sample.image) ?: error("Unsupported or damaged image")
     try {
         val start = System.nanoTime()
-        val profiles = readDetectionProfiles(image.width, image.height) { y, pixels ->
+        val result = analyzeImageBanding(image.width, image.height) { y, pixels ->
             image.getRGB(0, y, image.width, 1, pixels, 0, image.width)
         }
-        val result = analyzeDetectionProfiles(profiles)
         EvaluationRecord(sample, result, (System.nanoTime() - start) / 1_000_000.0)
     } finally {
         image.flush()
