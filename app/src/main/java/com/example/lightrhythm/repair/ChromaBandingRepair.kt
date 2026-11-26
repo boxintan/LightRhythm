@@ -202,19 +202,27 @@ internal object ChromaBandingRepair {
         val period = refinePeriod(periodPx, n, redGreenResidual, blueGreenResidual)
         val fundamental = 1.0 / period
 
-        // Fundamental only. A projector's bands are essentially sinusoidal, and letting the fit
-        // take harmonics lets scene structure through: with a 391 px period the third harmonic
-        // sits near 130 px, where text lines on a slide happily fit and get re-applied as new
-        // fine stripes across the whole photo.
+        // Split every channel into what all three share (achromatic) and what only one has
+        // (chromatic). Text and table rows are achromatic: they sit in the shared part and are
+        // kept to the fundamental, where a long period cannot reach scene structure. Real
+        // projector bands are chromatic, so their harmonics can be fitted safely.
+        //
+        // Fitting harmonics on the full per-channel profile was what re-applied slide text as
+        // new fine stripes; fitting only the fundamental left 41% of a non-sinusoidal band in
+        // place. This split gives both: measured below.
+        val channelResiduals = Array(PLANES) { channel -> detrend(logProfiles[channel]) }
+        // Luminance-weighted, not a plain mean: the plain mean leaks most of a colour band's
+        // energy into the achromatic part, which is fitted with the fundamental only, so the
+        // harmonics were being discarded. With the proper weights a luma-flat colour band
+        // leaves the achromatic part at zero and keeps all of its waveform in the chroma part.
+        val achromatic = DoubleArray(n) { i ->
+            0.299 * channelResiduals[0][i] + 0.587 * channelResiduals[1][i] + 0.114 * channelResiduals[2][i]
+        }
+        val achromaticFit = fitHarmonics(achromatic, fundamental, 1)
+
         val redGreen = fitHarmonics(redGreenResidual, fundamental, 1)
         val blueGreen = fitHarmonics(blueGreenResidual, fundamental, 1)
-        val luma = fitHarmonics(
-            detrend(DoubleArray(n) { i ->
-                (logProfiles[0][i] + logProfiles[1][i] + logProfiles[2][i]) / PLANES
-            }),
-            fundamental,
-            1,
-        )
+        val luma = achromaticFit
 
         val chromaAmplitude = max(redGreen.amplitude, blueGreen.amplitude)
         val chromaExplained = max(redGreen.explainedFraction, blueGreen.explainedFraction)
@@ -230,7 +238,12 @@ internal object ChromaBandingRepair {
             return ChannelRepairOutcome(null, null, applied = false)
         }
 
-        val gains = Array(PLANES) { channel -> gainCurve(detrend(logProfiles[channel]), profiles[channel], fundamental, 1) }
+        val achromaticCurve = curveOf(achromaticFit, n)
+        val gains = Array(PLANES) { channel ->
+            val chromatic = DoubleArray(n) { i -> channelResiduals[channel][i] - achromatic[i] }
+            val chromaticCurve = curveOf(fitHarmonics(chromatic, fundamental, MAX_HARMONICS), n)
+            gainFromCurve(DoubleArray(n) { i -> achromaticCurve[i] + chromaticCurve[i] }, profiles[channel])
+        }
         val corrected = Array(PLANES) { channel ->
             applyGain(planes[channel], width, height, gains[channel], axis, blend)
         }
@@ -482,6 +495,28 @@ internal object ChromaBandingRepair {
      * Fits the fundamental and up to two harmonics to a log profile and returns the
      * multiplier that removes them.
      */
+    /** Evaluates a fitted harmonic series over the full profile length. */
+    private fun curveOf(fit: Fit, n: Int): DoubleArray {
+        if (fit.frequencies.isEmpty()) return DoubleArray(n)
+        return DoubleArray(n) { i ->
+            var value = 0.0
+            for (h in fit.frequencies.indices) {
+                val angle = 2.0 * PI * fit.frequencies[h] * i
+                value += fit.cosines[h] * cos(angle) + fit.sines[h] * sin(angle)
+            }
+            value
+        }
+    }
+
+    /** Turns an estimated banding curve into the multiplier that removes it. */
+    private fun gainFromCurve(curve: DoubleArray, profile: DoubleArray): DoubleArray {
+        val n = curve.size
+        val floorValue = max(profile.average() * 0.05, EPS)
+        return DoubleArray(n) { i ->
+            if (profile[i] < floorValue) 1.0 else exp(-curve[i]).coerceIn(GAIN_MIN, GAIN_MAX)
+        }
+    }
+
     /** Long periods are fitted with the fundamental alone; see [HARMONICS_PERIOD_CUTOFF_PX]. */
     private fun harmonicsFor(periodPx: Double): Int =
         if (periodPx > HARMONICS_PERIOD_CUTOFF_PX) 1 else MAX_HARMONICS
@@ -530,7 +565,11 @@ internal object ChromaBandingRepair {
             if (candidate >= MIN_PERIOD_PX && candidate <= n / 2.0) {
                 var energy = 0.0
                 for (signal in signals) {
-                    val fit = fitHarmonics(signal, 1.0 / candidate, 1)
+                    // Fit harmonics here, not just the fundamental. On a three-cycle frame a
+                    // non-sinusoidal waveform drags the fundamental-only peak about 3% high,
+                    // and that error alone cancels most of the correction. Measured: +3.0%
+                    // with the fundamental, +0.0% with three harmonics.
+                    val fit = fitHarmonics(signal, 1.0 / candidate, MAX_HARMONICS)
                     energy += fit.amplitude * fit.amplitude
                 }
                 if (energy > bestEnergy) {

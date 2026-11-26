@@ -350,6 +350,33 @@ class ChromaBandingRepairTest {
     }
 
     @Test
+    fun keepsThePeriodAccurateForANonSinusoidalBand() {
+        // A projector band is not a pure sine. On a three-cycle frame the fundamental-only
+        // peak search is dragged about 3% high by the harmonics, and that error alone cancels
+        // most of the correction.
+        val width = 400
+        val height = 1200
+        val period = 391.0
+        val depths = flatLumaDepths(-1.0, -1.5)
+        val planes = Array(3) { FloatArray(width * height) }
+        for (y in 0 until height) {
+            val theta = 2.0 * PI * y / period
+            val wave = 0.10 * sin(theta) + 0.04 * sin(2 * theta) + 0.02 * sin(3 * theta)
+            for (x in 0 until width) {
+                val index = y * width + x
+                for (c in 0 until 3) {
+                    planes[c][index] = (0.6 * (1.0 + depths[c] * wave)).toFloat().coerceIn(0f, 1f)
+                }
+            }
+        }
+
+        val outcome = ChromaBandingRepair.repairWithPeriod(planes, width, height, period)
+
+        assertTrue(outcome.applied)
+        assertEquals(period, outcome.estimate!!.periodPx, period * 0.02)
+    }
+
+    @Test
     fun refinesALargeUnderestimateFromTheDetector() {
         // A's estimate is not always centred; -10% used to leave 18% residual because the
         // local search only reached -6%.
