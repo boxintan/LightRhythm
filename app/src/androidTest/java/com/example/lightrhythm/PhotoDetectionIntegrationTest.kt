@@ -31,6 +31,27 @@ class PhotoDetectionIntegrationTest {
     @get:Rule val compose = createComposeRule()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
+    @Test fun parallelDetectorsMatchSerialEvidenceAndKeepTheirSharedSource() = runBlocking {
+        val width=320; val height=384
+        val pixels=IntArray(width*height) { i ->
+            val wave=(20*sin(2*PI*((i/width)/15.0+(i%width)*(i%width)/18000.0))).toInt()
+            (255 shl 24) or ((180+wave) shl 16) or (180 shl 8) or (180-wave)
+        }
+        val bitmap=Bitmap.createBitmap(pixels,width,height,Bitmap.Config.ARGB_8888)
+        try {
+            val banding=detectBanding(bitmap)
+            val moire=com.example.lightrhythm.detection.detectMoire(bitmap)
+            repeat(3) {
+                val result=PhotoDetectionPipeline().run(bitmap)
+                assertEquals(banding,result.result)
+                assertEquals(moire,result.moire)
+            }
+            val after=IntArray(pixels.size)
+            bitmap.getPixels(after,0,width,0,0,width,height)
+            assertArrayEquals(pixels,after)
+        } finally { bitmap.recycle() }
+    }
+
     private fun colorSample(): File {
         val width = 960
         val height = 720

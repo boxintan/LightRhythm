@@ -30,42 +30,63 @@ private fun analyzeLocalScale(width: Int, height: Int, size: Int, config: Detect
     val margin = size / 8
     val regionWidth = size / 4
     val pixels = IntArray(size * (size + 2 * margin))
+    val values = DoubleArray(pixels.size)
+    val samples = DoubleArray(regionWidth)
+    val sourceOffsets = Array(9) { index ->
+        val slope=(index-4)*0.05
+        IntArray(size) { x -> (margin+(slope*(x-(size-1)/2.0)).roundToInt())*size+x }
+    }
     val candidates = mutableListOf<LocalStripeTile>()
     for (gy in 0..3) for (gx in 0..5) {
         val left = ((width - size) * (gx + 0.5) / 6).toInt()
         val top = margin + ((height - size - 2*margin) * (gy + 0.5) / 4).toInt()
-        val values = DoubleArray(size * (size+2*margin))
+        var allOpaque=true
         readTile(left, top-margin, size, size+2*margin, pixels)
         for (y in 0 until size+2*margin) {
             for (x in 0 until size) {
                 val pixel = pixels[y*size+x]
-                values[y*size+x] = if (pixel ushr 24 == 255) pixelLuminance(pixel) else Double.NaN
+                values[y*size+x] = if (pixel ushr 24 == 255) pixelLuminance(pixel) else {
+                    allOpaque=false
+                    Double.NaN
+                }
             }
         }
         var best: LocalStripeTile? = null
         var bestCoherentAmplitude = 0.0
-        for (slopeIndex in -4..4) {
+        slopeLoop@ for (slopeIndex in -4..4) {
             val slope = slopeIndex * 0.05
+            val offsets=sourceOffsets[slopeIndex+4]
             val profiles = List(4) { DoubleArray(size) }
-            var usable = true
             for (y in 0 until size) for (region in 0..3) {
-                val samples = DoubleArray(regionWidth) { offset ->
+                val rowStart=y*size
+                if(allOpaque) for(offset in 0 until regionWidth) {
+                    val x=region*regionWidth+offset
+                    samples[offset]=values[rowStart+offsets[x]]
+                } else for(offset in 0 until regionWidth) {
                     val x = region*regionWidth+offset
-                    val yy = y+margin+(slope*(x-(size-1)/2.0)).roundToInt()
-                    values[yy*size+x]
+                    val value=values[rowStart+offsets[x]]
+                    if(!value.isFinite()) continue@slopeLoop
+                    samples[offset]=value
                 }
-                if (samples.any { !it.isFinite() }) { usable = false; break }
-                samples.sort()
                 // Upper quartile suppresses sparse dark glyphs while retaining broad dark bands.
-                profiles[region][y] = samples[regionWidth*3/4]
+                profiles[region][y] = selectLuminanceOrderStatistic(samples,regionWidth*3/4)
             }
-            if (!usable) continue
             // Suppress pixel grain in the narrow-column quantiles before testing recurrence.
             val filtered = profiles.map { profile -> DoubleArray(size) { y ->
                 (profile[maxOf(0,y-1)] + 2*profile[y] + profile[minOf(size-1,y+1)]) / 4
             } }
-            val result = analyzeBandingProfiles(filtered, List(4) { regionWidth }, config)
-            val period = result.candidatePeriodRows ?: continue
+            val raw=DoubleArray(size) { y ->
+                var sum=0.0
+                for(region in 0..3) sum+=filtered[region][y]*regionWidth.toDouble()/size
+                sum
+            }
+            val maxLag=minOf(config.maxPeriodRows,size/config.minCycles)
+            val trend=localLinearTrend(raw,maxLag)
+            val residual=DoubleArray(size) { raw[it]-trend[it] }
+            val amplitude=kotlin.math.sqrt(residual.sumOf { it*it }/size)
+            if(amplitude<config.minRmsAmplitude) continue
+            val candidate=selectBandingPeriod(residual,maxLag,config) ?: continue
+            val period=candidate.period
             // Local projection perspective can retain a small phase shift between columns.
             // Require the same spacing, amplitude and half-cycle reversal, not whole-frame phase.
             val periodicRegions = filtered.count { profile ->
@@ -79,10 +100,10 @@ private fun analyzeLocalScale(width: Int, height: Int, size: Int, config: Detect
             // Correlation alone is almost identical at several aliased slopes in a small window.
             // Prefer the tilt retaining the strongest recurring brightness, rather than a nearly
             // flat projection whose tiny residual happens to have a slightly higher correlation.
-            val coherentAmplitude = result.rmsAmplitude * result.autocorrelation
+            val coherentAmplitude = amplitude * candidate.correlation
             if (best == null || coherentAmplitude > bestCoherentAmplitude) {
                 best = LocalStripeTile(left, top, size, period,
-                    slope, result.autocorrelation, gx, gy, sourceMarginRows = margin)
+                    slope, candidate.correlation, gx, gy, sourceMarginRows = margin)
                 bestCoherentAmplitude = coherentAmplitude
             }
         }
@@ -100,6 +121,35 @@ private fun analyzeLocalScale(width: Int, height: Int, size: Int, config: Detect
             hasPersistentColumns(it, samePeriod, config.minRegionSupport) }
     }.maxByOrNull { it.size }
     return cluster?.let { LocalBandingEvidence(it) }
+}
+
+/** In-place exact selection for finite, nonnegative luminance samples. No quantization or sort.
+ * The caller reuses its scratch array and overwrites every element before the next selection.
+ */
+internal fun selectLuminanceOrderStatistic(samples: DoubleArray,k: Int): Double {
+    val ascending=samples.first()<=samples.last()
+    var ordered=true
+    for(i in 1 until samples.size) {
+        if(if(ascending) samples[i]<samples[i-1] else samples[i]>samples[i-1]) { ordered=false; break }
+    }
+    if(ordered) return samples[if(ascending) k else samples.lastIndex-k]
+    var left=0
+    var right=samples.lastIndex
+    while(left<right) {
+        val a=samples[left]; val b=samples[(left+right) ushr 1]; val c=samples[right]
+        val pivot=if(a<b) { if(b<c) b else maxOf(a,c) } else { if(a<c) a else maxOf(b,c) }
+        var i=left; var j=right
+        while(i<=j) {
+            while(samples[i]<pivot) i++
+            while(samples[j]>pivot) j--
+            if(i<=j) {
+                val value=samples[i]; samples[i]=samples[j]; samples[j]=value
+                i++; j--
+            }
+        }
+        if(k<=j) right=j else if(k>=i) left=i else return samples[k]
+    }
+    return samples[k]
 }
 
 /** A line family must persist vertically at more than one horizontal position.

@@ -60,28 +60,9 @@ internal fun analyzeBandingProfiles(
     }
     if (amplitude < config.minRmsAmplitude) return result(BandingStatus.LOW_AMPLITUDE)
 
-    val correlations = DoubleArray(maxLag + 2) { lag -> correlation(residual, residual, lag) }
-    val candidates = (config.minPeriodRows..maxLag).filter { period ->
-        correlations[period] >= config.minAutocorrelation &&
-            correlations[period] >= correlations[period - 1] &&
-            correlations[period] > correlations[period + 1] &&
-            // 半周期应有明暗反转，单纯平滑变化的高相关不足以作为周期证据。
-            correlations[period / 2] <= -0.15 &&
-            // A short repeating texture also correlates at 3x, 5x, ... its period.
-            // Do not allow these aliases to bypass the configured minimum period.
-            (2 until config.minPeriodRows).none { shorter ->
-                period % shorter == 0 &&
-                    correlations[shorter] >= config.minAutocorrelation &&
-                    correlations[shorter] >= correlations[period] - 0.03 &&
-                    correlations[shorter] >= correlations[shorter - 1] &&
-                    correlations[shorter] > correlations[shorter + 1]
-            }
-    }
-    if (candidates.isEmpty()) return result(BandingStatus.NO_CLEAR_PERIODICITY)
-    val bestPeak = candidates.maxOf { correlations[it] }
-    // 相关度接近时取最短周期，减少选择基频整数倍的情况。
-    val period = candidates.first { correlations[it] >= bestPeak - 0.03 }
-    val peak = correlations[period]
+    val candidate=selectBandingPeriod(residual,maxLag,config) ?: return result(BandingStatus.NO_CLEAR_PERIODICITY)
+    val period=candidate.period
+    val peak=candidate.correlation
     var x = 0
     val evidence = profiles.mapIndexed { index, rows ->
         val regionTrend = localLinearTrend(rows, radius)
@@ -98,6 +79,39 @@ internal fun analyzeBandingProfiles(
     val support = evidence.count { it.supportsCandidate }.toDouble() / evidence.size
     val status = if (support >= config.minRegionSupport) BandingStatus.SUSPECTED else BandingStatus.INCONSISTENT_REGIONS
     return result(status, period, peak, support, evidence)
+}
+
+internal data class BandingPeriod(val period: Int,val correlation: Double)
+
+/** Shared selection rules; local scans need no boxed row reports or whole-image phase checks. */
+internal fun selectBandingPeriod(residual: DoubleArray,maxLag: Int,config: DetectionConfig): BandingPeriod? {
+    val correlations=periodSearchCorrelations(residual,maxLag,config.minPeriodRows,config.minAutocorrelation)
+    val candidates=IntArray(maxLag+1)
+    var count=0
+    var bestPeak=Double.NEGATIVE_INFINITY
+    for(period in config.minPeriodRows..maxLag) if(
+        correlations[period] >= config.minAutocorrelation &&
+            correlations[period] >= correlations[period - 1] &&
+            correlations[period] > correlations[period + 1] &&
+            // 半周期应有明暗反转，单纯平滑变化的高相关不足以作为周期证据。
+            correlations[period / 2] <= -0.15 &&
+            // A short repeating texture also correlates at 3x, 5x, ... its period.
+            // Do not allow these aliases to bypass the configured minimum period.
+            (2 until config.minPeriodRows).none { shorter ->
+                period % shorter == 0 &&
+                    correlations[shorter] >= config.minAutocorrelation &&
+                    correlations[shorter] >= correlations[period] - 0.03 &&
+                    correlations[shorter] >= correlations[shorter - 1] &&
+                    correlations[shorter] > correlations[shorter + 1]
+            }
+    ) {
+        candidates[count++]=period
+        if(correlations[period]>bestPeak) bestPeak=correlations[period]
+    }
+    if(count==0) return null
+    // 相关度接近时取最短周期，减少选择基频整数倍的情况。
+    val period=(0 until count).first { correlations[candidates[it]]>=bestPeak-.03 }.let { candidates[it] }
+    return BandingPeriod(period,correlations[period])
 }
 
 /** 用滑动局部直线拟合估计缓慢趋势；截断边界也拟合直线，避免给纯渐变引入假条带。 */

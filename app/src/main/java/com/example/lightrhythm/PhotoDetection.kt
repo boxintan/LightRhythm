@@ -7,6 +7,7 @@ import com.example.lightrhythm.detection.detectMoire
 import com.example.lightrhythm.detection.MoireResult
 import com.example.lightrhythm.model.BandingResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
@@ -19,9 +20,14 @@ internal class PhotoDetectionPipeline(
     suspend fun run(source: Bitmap): TimedDetectionResult = withContext(Dispatchers.Default) {
         ensureActive()
         val start = SystemClock.elapsedRealtime()
+        // Both detectors only read the stable software preview and own their scratch buffers.
+        val moireTask=async {
+            ensureActive()
+            detectMoire(source).also { ensureActive() }
+        }
         val result = detector(source)
         ensureActive()
-        val moire = detectMoire(source)
+        val moire = moireTask.await()
         ensureActive()
         TimedDetectionResult(result, SystemClock.elapsedRealtime() - start, moire)
     }
