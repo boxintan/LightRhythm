@@ -41,6 +41,47 @@ internal object BandingPhotoProcessor : PhotoProcessor {
             return ProcessingResult.NotApplied("疑似摩尔纹暂不支持修复，未生成修复预览。")
         }
         context.ensureActive()
+        // Horizontal first: A owns it. A only scans rows, so a vertical band can never be
+        // reported by it — B has to look for that direction itself. The horizontal message is
+        // kept when neither direction repairs anything, so nothing A wanted to say is lost.
+        val horizontal = repairHorizontalLuminance(source, detection, strength, context)
+        if (horizontal is ProcessingResult.Preview) return horizontal
+        val vertical = repairVertical(source, strength, context)
+        if (vertical is ProcessingResult.Preview) return vertical
+        return horizontal
+    }
+
+    /** B's own pass for vertical banding; A's row-based detector cannot report this. */
+    private fun repairVertical(source: Bitmap, strength: Float, context: CoroutineContext): ProcessingResult {
+        val width = source.width
+        val height = source.height
+        if (width < 32 || height < 32) {
+            return ProcessingResult.NotApplied("图片尺寸不足以判断竖纹，未生成修复预览。")
+        }
+        val pixels = IntArray(width * height)
+        source.getPixels(pixels, 0, width, 0, 0, width, height)
+        val outcome = ChromaBandingRepair.repair(
+            planes = ArgbPlanes.toPlanes(pixels),
+            width = width,
+            height = height,
+            strength = strength,
+            axisHint = BandingAxis.VERTICAL,
+        )
+        context.ensureActive()
+        if (!outcome.applied) return ProcessingResult.NotApplied("未发现可修复的竖纹，未生成修复预览。")
+        val corrected = ArgbPlanes.fromPlanes(outcome.planes!!, pixels)
+        if (corrected.contentEquals(pixels)) {
+            return ProcessingResult.NotApplied("当前参数未产生像素变化，未生成修复预览。")
+        }
+        return ProcessingResult.Preview(Bitmap.createBitmap(corrected, width, height, Bitmap.Config.ARGB_8888))
+    }
+
+    private fun repairHorizontalLuminance(
+        source: Bitmap,
+        detection: com.example.lightrhythm.model.BandingResult,
+        strength: Float,
+        context: CoroutineContext,
+    ): ProcessingResult {
         if (detection.status != BandingStatus.SUSPECTED) {
             return ProcessingResult.NotApplied("未发现可修复的明确明暗横纹，未生成修复预览。")
         }
