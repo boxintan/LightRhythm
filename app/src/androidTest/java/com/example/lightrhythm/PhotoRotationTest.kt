@@ -67,7 +67,7 @@ class PhotoRotationTest {
                     val model = ViewModelProvider(it)[PhotoViewModel::class.java]
                     assertTrue(model.neutralBackground)
                     assertSame(original, model.bitmap)
-                    assertEquals("row-local-broad-v7", model.detection!!.result.algorithmVersion)
+                    assertEquals("row-local-broad-v8", model.detection!!.result.algorithmVersion)
                 }
             }
         } finally { fixture.recycle(); file.delete() }

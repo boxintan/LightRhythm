@@ -1,4 +1,6 @@
-# 横纹检测接口 v7
+# 横纹检测接口 v8
+
+2026-11-26：像素入口为 `row-local-periodicity-v8`，中性背景模式为 `row-local-broad-v8`。局部候选必须在至少两列获得上下位置的持续支持，并使用未按倾斜过滤的周期相容位置排查矛盾；支持比例沿用 `DetectionConfig.minRegionSupport`。倾斜方向按周期相关与残差幅度的乘积选择。函数、字段及坐标含义不变，摩尔纹版本不变。参数、13 号百叶窗反例和验证见 [v8 记录](blinds-false-positive-v8.md)。以下为历史记录。
 
 2026-11-25 更新：像素入口版本为 `row-local-periodicity-v7`（确认中性背景时 `row-local-broad-v7`）。局部回退先检查 128 像素窗口，失败后独立检查 64 窗口，不累加尺度票数。`LocalStripeTile.sourceMarginRows` 分别为 16/8，读取范围须使用返回值；`LocalBandingEvidence.testedCells` 是所选尺度的空间位置数。公开函数和原有字段含义不变。摩尔纹版本为 `local-chroma-recurrence-v4`，仅优化矩形像素读取，候选判据保持。详见 [本轮验证](detection-tile-scale-v7.md)。以下为历史演进记录。
 

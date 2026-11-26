@@ -36,13 +36,13 @@ internal fun analyzeImageBanding(width: Int, height: Int,
         readTile ?: rowTileReader(width, readRow)) else null
     val periodic = original.copy(
         status = if (!original.isSuspected && local != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_LOCAL_BANDING else original.status,
-        localBandingEvidence = local, algorithmVersion = "row-local-periodicity-v7",
+        localBandingEvidence = local, algorithmVersion = "row-local-periodicity-v8",
     )
     if (!assumeNeutralBackground) return periodic
     val broad = analyzeBroadColorBanding(width, height, readRow)
     return periodic.copy(
         status = if (!periodic.isSuspected && broad != null) com.example.lightrhythm.model.BandingStatus.SUSPECTED_BROAD_COLOR_BAND else periodic.status,
-        broadColorEvidence = broad, algorithmVersion = "row-local-broad-v7",
+        broadColorEvidence = broad, algorithmVersion = "row-local-broad-v8",
     )
 }
 

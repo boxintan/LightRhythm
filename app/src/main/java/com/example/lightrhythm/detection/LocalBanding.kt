@@ -42,6 +42,7 @@ private fun analyzeLocalScale(width: Int, height: Int, size: Int, config: Detect
             }
         }
         var best: LocalStripeTile? = null
+        var bestCoherentAmplitude = 0.0
         for (slopeIndex in -4..4) {
             val slope = slopeIndex * 0.05
             val profiles = List(4) { DoubleArray(size) }
@@ -74,18 +75,49 @@ private fun analyzeLocalScale(width: Int, height: Int, size: Int, config: Detect
                     correlation(residual,residual,period/2) <= -0.15
             }
             if (periodicRegions / 4.0 < config.minRegionSupport) continue
-            if (best == null || result.autocorrelation > best.correlation) {
+            // Correlation alone is almost identical at several aliased slopes in a small window.
+            // Prefer the tilt retaining the strongest recurring brightness, rather than a nearly
+            // flat projection whose tiny residual happens to have a slightly higher correlation.
+            val coherentAmplitude = result.rmsAmplitude * result.autocorrelation
+            if (best == null || coherentAmplitude > bestCoherentAmplitude) {
                 best = LocalStripeTile(left, top, size, period,
                     slope, result.autocorrelation, gx, gy, sourceMarginRows = margin)
+                bestCoherentAmplitude = coherentAmplitude
             }
         }
         best?.let { candidates += it }
     }
     // A repeated structure must agree in spacing and slope across several spatial positions.
-    val cluster = candidates.map { anchor -> candidates.filter {
-        abs(it.periodRows-anchor.periodRows) <= maxOf(1.0, anchor.periodRows*0.2) &&
+    val cluster = candidates.mapNotNull { anchor ->
+        val samePeriod = candidates.filter {
+            abs(it.periodRows-anchor.periodRows) <= maxOf(1.0, anchor.periodRows*0.2)
+        }
+        val aligned = samePeriod.filter {
             abs(it.slope-anchor.slope) <= 0.1+1e-9
-    } }.filter { it.size >= 4 && it.map { tile -> tile.column }.distinct().size >= 2 &&
-        it.map { tile -> tile.row }.distinct().size >= 2 }.maxByOrNull { it.size }
+        }
+        aligned.takeIf { it.size >= 4 && it.map { tile -> tile.row }.distinct().size >= 2 &&
+            hasPersistentColumns(it, samePeriod, config.minRegionSupport) }
+    }.maxByOrNull { it.size }
     return cluster?.let { LocalBandingEvidence(it) }
+}
+
+/** A line family must persist vertically at more than one horizontal position.
+ * Counting unrelated rows/columns alone lets converging physical slats assemble a false cluster.
+ * One slope search step is allowed between rows to account for the quantized tilt estimate.
+ */
+private fun hasPersistentColumns(tiles: List<LocalStripeTile>, samePeriod: List<LocalStripeTile>,
+    minimumSupport: Double): Boolean {
+    // Inspect the period-compatible evidence before filtering by tilt. Otherwise discarding a
+    // contradictory row could make converging slats look like several independent stable columns.
+    val repeatedColumns = samePeriod.groupBy { it.column }.filterValues { it.size >= 2 }
+    if (repeatedColumns.size < 2) return false
+    val persistent = repeatedColumns.filterValues { column ->
+        column.indices.all { i -> (i+1 until column.size).all { j ->
+            val first=column[i]; val second=column[j]
+            abs(first.slope-second.slope) <= 0.05+1e-9 &&
+                abs(first.periodRows-second.periodRows) <= maxOf(1.0,minOf(first.periodRows,second.periodRows)*0.2)
+        } }
+    }.keys
+    return persistent.size.toDouble()/repeatedColumns.size >= minimumSupport &&
+        tiles.groupBy { it.column }.count { (column, evidence) -> column in persistent && evidence.size >= 2 } >= 2
 }

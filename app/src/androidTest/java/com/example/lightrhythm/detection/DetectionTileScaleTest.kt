@@ -59,4 +59,14 @@ class DetectionTileScaleTest {
     @Test fun wideColorBandsDoNotTurnIntoMoireThroughTileReads() = photo("06.jpg",1600) { image ->
         assertFalse(detectMoire(image).isSuspected)
     }
+
+    @Test fun window13DoesNotTriggerBandingAtThreeAndroidDecodeSizes() {
+        for(edge in listOf(1280,960,480)) photo("13.jpg",edge) { image ->
+            val result=detectBanding(image)
+            assertFalse("Window false positive at $edge",result.isSuspected)
+            assertNull(result.localBandingEvidence)
+            assertTrue(result.candidateRowOffsets.isEmpty())
+            assertFalse(detectMoire(image).isSuspected)
+        }
+    }
 }

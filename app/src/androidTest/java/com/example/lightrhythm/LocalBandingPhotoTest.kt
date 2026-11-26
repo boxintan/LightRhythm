@@ -13,6 +13,23 @@ import java.io.File
 
 class LocalBandingPhotoTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun window13ShowsNoBandingWarningOrRepairPreview() {
+        val directory=InstrumentationRegistry.getArguments().getString("detectionSampleDirectory")
+        assumeTrue("Provide private samples",directory != null)
+        val file=File(directory!!,"13.jpg")
+        val before=file.readBytes()
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("检测完成，原图未修改。").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("疑似局部横纹").assertDoesNotExist()
+        compose.onNodeWithText("疑似明暗横纹").assertDoesNotExist()
+        compose.onNodeWithText("疑似摩尔纹").assertDoesNotExist()
+        compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("未发现可修复的明确明暗横纹",substring=true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
+        assertArrayEquals(before,file.readBytes())
+    }
     @Test fun photo09ShowsLocalStripesAndRejectsWholeRowRepair() {
         val directory = InstrumentationRegistry.getArguments().getString("detectionSampleDirectory")
         assumeTrue("Provide private samples", directory != null)
