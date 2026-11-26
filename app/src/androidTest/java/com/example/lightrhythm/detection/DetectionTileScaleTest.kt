@@ -103,4 +103,11 @@ class DetectionTileScaleTest {
                 "${result.status} moire=${moire.isSuspected} regions=${result.localizedStripes}")
         }
     }
+
+    @Test fun newWindow20DoesNotTriggerAtNativeAndThreePreviewSizes() {
+        for(edge in listOf(1920,1600,960,480)) photo("20.jpg",edge) { image ->
+            assertFalse("Banding false positive at $edge",detectBanding(image).isSuspected)
+            assertFalse("Moire false positive at $edge",detectMoire(image).isSuspected)
+        }
+    }
 }

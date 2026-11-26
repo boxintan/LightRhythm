@@ -80,6 +80,11 @@ class EvaluationTest {
         assertTrue(result.contains("band,1.png"))
         assertTrue(result.contains("\"TP\""))
         assertTrue(File(output, "summary.csv").isFile)
+        assertTrue(File(output, "moire-summary.csv").isFile)
+        val groupReport=File(output,"group-summary.csv").readText()
+        assertTrue(groupReport.contains("\"scene-1\",\"banding\""))
+        assertTrue(groupReport.contains("\"scene-1\",\"moire\""))
+        assertTrue(File(output, "protocol.txt").readText().contains("manifestSHA256="))
         val original = File(output, "results.csv").readBytes()
         try {
             runEvaluation(arrayOf(input.path, output.path))
@@ -87,5 +92,60 @@ class EvaluationTest {
         } catch (expected: IllegalArgumentException) {
             assertArrayEquals(original, File(output, "results.csv").readBytes())
         }
+    }
+
+    @Test fun copiedFilesCannotLeakAcrossGroupsOrSplits() {
+        val original=image("original.png")
+        original.copyTo(File(temporary.root,"renamed.png"))
+        try {
+            readEvaluationManifest(manifest("a\toriginal.png\tclean\tdev\ta\nb\trenamed.png\tclean\tvalidation\tb\n"))
+            fail("Renaming identical content must not create an independent validation sample")
+        } catch(expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("Duplicate file contents"))
+        }
+    }
+
+    @Test fun moireLabelsAreIndependentAndMissingLabelsNeverMeanClean() {
+        val file=image("full.png",256,256)
+        val header="id\tpath\tlabel\tsplit\tgroup\tmoireLabel\n"
+        val input=File(temporary.root,"extended.tsv").apply {
+            writeText(header+"one\tfull.png\tunknown\tdev\tscene\tmoire\n")
+        }
+        val sample=readEvaluationManifest(input).single()
+        assertEquals("moire",sample.moireLabel)
+        assertEquals(64,sample.contentSha256.length)
+        val record=evaluateSample(sample)
+        assertEquals("UNLABELED",record.outcome)
+        assertEquals("FN",record.moireOutcome)
+        assertEquals("UNLABELED",evaluateSample(sample.copy(moireLabel="unknown")).moireOutcome)
+        assertEquals("TN",evaluateSample(sample.copy(moireLabel="clean")).moireOutcome)
+        assertEquals("unknown",readEvaluationManifest(manifest("one\tfull.png\tclean\tdev\tscene\n")).single().moireLabel)
+        assertTrue(file.isFile)
+    }
+
+    @Test fun moireMetricsDoNotCountUnknownTargetsOrMissingPixelsAsNegatives() {
+        val sample=EvaluationSample("x",File("unused"),"unknown","validation","scene",moireLabel="moire")
+        val records=listOf(
+            EvaluationRecord(sample,moire=MoireResult(emptyList(),16)),
+            EvaluationRecord(sample.copy(moireLabel="clean"),moire=MoireResult(emptyList(),16)),
+            EvaluationRecord(sample.copy(moireLabel="unknown"),moire=MoireResult(emptyList(),16)),
+            EvaluationRecord(sample,moire=MoireResult(emptyList(),0)),
+        )
+        assertEquals(listOf("FN","TN","UNLABELED","SKIPPED"),records.map { it.moireOutcome })
+        val row=metricRows(records,true).last()
+        assertEquals(listOf("0","1","1","0","0","1","1"),row.subList(4,11))
+        assertEquals("0.666667",row.last())
+    }
+
+    @Test fun explicitPreviewConditionIsRecordedAndDoesNotChangeSourceFiles() {
+        val file=image("preview.png",256,512)
+        val before=file.readBytes()
+        val input=manifest("one\tpreview.png\tclean\tdev\tsource-scene\n")
+        val output=File(temporary.root,"preview-report")
+        runEvaluation(arrayOf(input.path,output.path,"256"))
+        val report=File(output,"results.csv").readText()
+        assertTrue(report.contains("\"128\",\"256\""))
+        assertTrue(File(output,"protocol.txt").readText().contains("maxEdgePixels=256"))
+        assertArrayEquals(before,file.readBytes())
     }
 }

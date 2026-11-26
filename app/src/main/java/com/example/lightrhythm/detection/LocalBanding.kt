@@ -120,5 +120,15 @@ private fun hasPersistentColumns(tiles: List<LocalStripeTile>, samePeriod: List<
         } }
     }.keys
     return persistent.size.toDouble()/repeatedColumns.size >= minimumSupport &&
-        tiles.groupBy { it.column }.count { (column, evidence) -> column in persistent && evidence.size >= 2 } >= 2
+        tiles.groupBy { it.column }.filter { (column, evidence) -> column in persistent && evidence.size >= 2 }
+            .values.let { columns ->
+                // Grid indices alone do not establish independent support: large windows can
+                // overlap almost completely in a narrow preview. Require separated source
+                // windows along both axes; adjacent rows/columns may share at most one third of their pixels.
+                columns.any { first -> columns.any { second ->
+                    kotlin.math.abs(first.first().x-second.first().x) >= first.first().size*2.0/3 &&
+                        first.maxOf { it.y }-first.minOf { it.y } >= first.first().size*2.0/3 &&
+                        second.maxOf { it.y }-second.minOf { it.y } >= second.first().size*2.0/3
+                } }
+            }
 }

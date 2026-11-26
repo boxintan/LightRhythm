@@ -73,6 +73,16 @@ class LocalizedStripesTest {
         assertTrue(evidence!!.tiles.all { it.size==256 && abs(it.periodRows-48)<=1 })
     }
 
+    @Test fun overlappingLargeWindowsDoNotMultiplyOneNarrowTextureIntoWideSupport() {
+        val evidence=analyzeLocalBandingTiles(540,960,DetectionConfig()) { x,y,w,h,out ->
+            for(yy in 0 until h) for(xx in 0 until w) {
+                val gray=if(x+xx>=200) (170+24*sin(2*PI*(y+yy)/44)).roundToInt() else 40
+                out[yy*w+xx]=rgb(gray,gray,gray)
+            }
+        }
+        assertNull(evidence)
+    }
+
     @Test fun coloredGradientNoiseAndTransparencyDoNotCreatePeriodicity() {
         assertTrue(analyze { x,y -> rgb(30,60+y/8,180+x/10) }.isEmpty())
         val random=Random(483)

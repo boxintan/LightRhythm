@@ -1,4 +1,6 @@
-# 横纹检测接口 v9
+# 横纹检测接口 v10
+
+2026-11-26：当前为工程原型，未建立独立真实场景验证，不能据开发照片回测宣称通用分类能力。v10 像素入口为 `row-region-periodicity-v10` / `row-region-broad-v10`，局部证据增加实际像素跨度检查，避免重叠窗口重复计票。摩尔纹为 `local-chroma-dual-v5`，同一周期须通过原始与归一化色差复核，并至少有三个不重叠来源矩形；`testedTiles` 记录实际尝试的空间中心数。结果字段兼容，仍不能把周期候选理解为已确认的成像干扰。方法、失败及验证边界见 [泛化审查](generalization-audit-v10.md)。
 
 2026-11-26：像素入口为 `row-region-periodicity-v9`，中性背景模式为 `row-region-broad-v9`。128/64 局部检测失败后独立尝试 256 窗口；再失败时检查高饱和颜色区域内的周期。新增可选 `BandingResult.localizedStripes`（默认空列表），每项为输入 Bitmap 像素坐标下的矩形、`StripeAxis`、`periodPixels`、通道与最弱支持条带相关值。横向周期以行为单位、竖向以列为单位；旧行序列字段不改成区域数据。新证据沿用 `SUSPECTED_LOCAL_BANDING`，禁止整行修复。摩尔纹算法保持 v4。已改善及仍漏检的照片、参数、验证见 [v9 记录](new-samples-v9.md)。以下保留历史接口演进。
 

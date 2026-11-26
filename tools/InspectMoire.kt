@@ -19,7 +19,7 @@ fun main(args: Array<String>) {
             val result = analyzeMoireTiles(image.width, image.height) { left, top, width, height, pixels ->
                 image.getRGB(left, top, width, height, pixels, 0, width)
             }
-            println("${File(path).name} ${image.width}x${image.height}: suspected=${result.isSuspected} tiles=${result.tiles.size} ms=${(System.nanoTime()-start)/1000000}")
+            println("${File(path).name} ${image.width}x${image.height}: suspected=${result.isSuspected} tiles=${result.tiles.size} testedCells=${result.testedTiles} ms=${(System.nanoTime()-start)/1000000}")
             println(result.tiles.joinToString { "${it.size}px:${it.channel}:${it.dx},${it.dy}/${"%.1f".format(java.util.Locale.ROOT,it.recurrenceDisplacementPixels)}" })
             image.flush()
         }

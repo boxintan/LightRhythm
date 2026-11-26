@@ -60,4 +60,21 @@ class LocalBandingPhotoTest {
         compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
         assertArrayEquals(before,file.readBytes())
     }
+
+    @Test fun newWindow20ShowsNoWarningAndCannotGenerateRepair() {
+        val directory=InstrumentationRegistry.getArguments().getString("detectionSampleDirectory")
+        assumeTrue("Provide private samples",directory!=null)
+        val file=File(directory!!,"20.jpg")
+        val before=file.readBytes()
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("检测完成，原图未修改。").fetchSemanticsNodes().isNotEmpty() }
+        for(text in listOf("疑似摩尔纹","疑似局部横纹","疑似明暗横纹"))
+            compose.onNodeWithText(text).assertDoesNotExist()
+        compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("未发现可修复的明确明暗横纹",substring=true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
+        assertArrayEquals(before,file.readBytes())
+    }
 }

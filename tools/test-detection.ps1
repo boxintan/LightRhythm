@@ -4,13 +4,17 @@ param(
     [Parameter(Mandatory = $true)][string]$AndroidJar,
     [string]$SampleImage,
     [string]$DatasetManifest,
-    [string]$ReportDirectory
+    [string]$ReportDirectory,
+    [int]$EvaluationMaxEdge = 0
 )
 
 # Gradle 不可用时的离线计算测试；不生成 APK，也不替代 Android 设备测试。
 $ErrorActionPreference = 'Stop'
 if ([bool]$DatasetManifest -ne [bool]$ReportDirectory) {
     throw 'DatasetManifest and ReportDirectory must be supplied together'
+}
+if ($EvaluationMaxEdge -ne 0 -and ($EvaluationMaxEdge -lt 64 -or $EvaluationMaxEdge -gt 8192)) {
+    throw 'EvaluationMaxEdge must be 0 or 64..8192'
 }
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 function Find-DependencyJar([string]$relativePath) {
@@ -62,7 +66,7 @@ if ($SampleImage) {
     if ($LASTEXITCODE -ne 0) { throw 'Sample inspection failed' }
 }
 if ($DatasetManifest) {
-    & $javaExecutable -cp ($outputDirectory + ';' + $testClasspath) com.example.lightrhythm.detection.EvaluateDetectionKt $DatasetManifest $ReportDirectory
+    & $javaExecutable -cp ($outputDirectory + ';' + $testClasspath) com.example.lightrhythm.detection.EvaluateDetectionKt $DatasetManifest $ReportDirectory $EvaluationMaxEdge
     if ($LASTEXITCODE -ne 0) { throw 'Dataset evaluation failed' }
 }
 Write-Output ('Test classes: ' + $outputDirectory)

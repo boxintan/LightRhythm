@@ -44,4 +44,44 @@ class MoireDetectorTest {
         assertEquals(0,result.testedTiles)
         assertFalse(result.isSuspected)
     }
+
+    @Test fun affineTintedNeutralStripesDoNotBecomeColorFringesThroughNormalization() {
+        for(period in listOf(9,17,29)) for(slope in listOf(-.15,0.0,.1)) {
+            val result=image(320,384) { x,y ->
+                val light=140+60*sin(2*PI*(y-slope*x)/period)
+                rgb((light+42).roundToInt(),(light+14).roundToInt(),light.roundToInt())
+            }
+            assertFalse("neutral texture: period=$period slope=$slope",result.isSuspected)
+        }
+    }
+
+    @Test fun independentColorFringesSurviveAnUnrelatedBrightnessPatternAndTint() {
+        val result=image { x,y ->
+            val brightness=18*sin(2*PI*y/47)
+            val fringe=20*sin(2*PI*(y/15.0+x*x/18000.0))
+            rgb((165+brightness+fringe+12).roundToInt(),(165+brightness).roundToInt(),
+                (165+brightness-fringe+5).roundToInt())
+        }
+        assertTrue(result.isSuspected)
+    }
+
+    @Test fun spatialVotesMustComeFromThreeNonOverlappingSourceAreas() {
+        fun tile(x: Int,y: Int,size: Int)=MoireTile(x,y,size,"R-G",0,1,12.0,.9)
+        assertFalse(MoireResult(listOf(tile(0,0,128),tile(8,8,128),tile(16,16,128)),16).isSuspected)
+        assertTrue(MoireResult(listOf(tile(0,0,64),tile(64,0,64),tile(0,64,64)),16).isSuspected)
+        // A large overlapping candidate must not hide a valid separate small-tile triple.
+        assertTrue(MoireResult(listOf(tile(0,0,128),tile(0,0,32),tile(32,0,32),tile(64,0,32)),16).isSuspected)
+    }
+
+    @Test fun colorChannelPermutationDoesNotDetermineWhetherFringesAreDetected() {
+        val permutations=listOf(listOf(0,1,2),listOf(0,2,1),listOf(1,0,2),listOf(1,2,0),listOf(2,0,1),listOf(2,1,0))
+        for(order in permutations) {
+            val result=image(320,384) { x,y ->
+                val wave=(20*sin(2*PI*(y/15.0+x*x/18000.0)+.7)).roundToInt()
+                val channels=listOf(170+wave,175,180-wave)
+                rgb(channels[order[0]],channels[order[1]],channels[order[2]])
+            }
+            assertTrue("RGB permutation $order",result.isSuspected)
+        }
+    }
 }
