@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.lightrhythm.model.BandingStatus
+import com.example.lightrhythm.model.StripeAxis
 
 @Composable
 internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modifier = Modifier) {
@@ -22,7 +23,12 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
         BandingStatus.SUSPECTED -> if (color != null) "疑似明暗横纹及颜色横带" else "疑似明暗横纹"
         BandingStatus.SUSPECTED_COLOR_BANDING -> "疑似颜色横带"
         BandingStatus.SUSPECTED_BROAD_COLOR_BAND -> "疑似宽幅色带"
-        BandingStatus.SUSPECTED_LOCAL_BANDING -> "疑似局部横纹"
+        BandingStatus.SUSPECTED_LOCAL_BANDING -> when {
+            result.localizedStripes.isEmpty() -> "疑似局部横纹"
+            result.localizedStripes.all { it.axis == StripeAxis.VERTICAL } -> "疑似局部竖纹"
+            result.localizedStripes.all { it.axis == StripeAxis.HORIZONTAL } -> "疑似局部横纹"
+            else -> "疑似局部条纹"
+        }
         BandingStatus.LOW_AMPLITUDE, BandingStatus.NO_CLEAR_PERIODICITY -> "未发现明确的周期横纹"
         BandingStatus.INCONSISTENT_REGIONS -> "存在局部周期变化，暂不能确认横纹"
         BandingStatus.INSUFFICIENT_DATA -> "图片尺寸不足，暂时无法判断"
@@ -32,6 +38,14 @@ internal fun DetectionResultCard(detection: TimedDetectionResult, modifier: Modi
             Text(heading, style = MaterialTheme.typography.titleMedium)
             result.localBandingEvidence?.let {
                 Text("多个局部区域存在重复明暗条纹，可能有倾斜或只覆盖部分画面；暂不支持这类条纹的修复。")
+            }
+            if(result.localizedStripes.isNotEmpty()) {
+                Text("局部区域存在重复条纹，原有内容纹理也可能产生相似结果；暂不支持这类条纹的修复。")
+            }
+            result.localizedStripes.take(3).forEach { region ->
+                val direction=if(region.axis==StripeAxis.HORIZONTAL) "横向" else "竖向"
+                val unit=if(region.axis==StripeAxis.HORIZONTAL) "像素行" else "像素列"
+                Text("局部条纹：$direction · 候选周期 ${region.periodPixels} $unit")
             }
             detection.moire?.let { moire ->
                 Text(when {

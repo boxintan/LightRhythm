@@ -1,4 +1,6 @@
-# 横纹检测接口 v8
+# 横纹检测接口 v9
+
+2026-11-26：像素入口为 `row-region-periodicity-v9`，中性背景模式为 `row-region-broad-v9`。128/64 局部检测失败后独立尝试 256 窗口；再失败时检查高饱和颜色区域内的周期。新增可选 `BandingResult.localizedStripes`（默认空列表），每项为输入 Bitmap 像素坐标下的矩形、`StripeAxis`、`periodPixels`、通道与最弱支持条带相关值。横向周期以行为单位、竖向以列为单位；旧行序列字段不改成区域数据。新证据沿用 `SUSPECTED_LOCAL_BANDING`，禁止整行修复。摩尔纹算法保持 v4。已改善及仍漏检的照片、参数、验证见 [v9 记录](new-samples-v9.md)。以下保留历史接口演进。
 
 2026-11-26：像素入口为 `row-local-periodicity-v8`，中性背景模式为 `row-local-broad-v8`。局部候选必须在至少两列获得上下位置的持续支持，并使用未按倾斜过滤的周期相容位置排查矛盾；支持比例沿用 `DetectionConfig.minRegionSupport`。倾斜方向按周期相关与残差幅度的乘积选择。函数、字段及坐标含义不变，摩尔纹版本不变。参数、13 号百叶窗反例和验证见 [v8 记录](blinds-false-positive-v8.md)。以下为历史记录。
 

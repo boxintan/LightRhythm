@@ -136,6 +136,10 @@ internal class PhotoViewModel(application: Application, private val saved: Saved
     fun process() {
         val source = bitmap ?: return
         if (busy) return
+        if (detection?.result?.localizedStripes?.isNotEmpty() == true) {
+            processingMessage = "局部条纹暂不支持修复，未生成修复预览。"
+            return
+        }
         if (detection?.result?.localBandingEvidence != null) {
             processingMessage = "局部或倾斜横纹暂不支持修复，未生成修复预览。"
             return

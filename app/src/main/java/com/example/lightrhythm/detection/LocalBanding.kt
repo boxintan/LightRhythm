@@ -16,7 +16,8 @@ internal fun analyzeLocalBandingTiles(width: Int, height: Int, config: Detection
     if (width < 256 || height < 256) return null
     // Preserve the established coarse result. A smaller fallback can fit inside a small screen
     // without including its bezel, surrounding room, and several unrelated lines of text.
-    for (size in listOf(128, 64)) {
+    for (size in listOf(128, 64, 256)) {
+        if (width < size || height < size + size/4) continue
         val evidence = analyzeLocalScale(width, height, size, config, readTile)
         if (evidence != null) return evidence
     }

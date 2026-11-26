@@ -44,4 +44,20 @@ class LocalBandingPhotoTest {
         compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
         assertArrayEquals(before,file.readBytes())
     }
+
+    @Test fun station19ShowsLocalizedEvidenceAndRejectsWholeRowRepair() {
+        val directory=InstrumentationRegistry.getArguments().getString("detectionSampleDirectory")
+        assumeTrue("Provide private samples",directory != null)
+        val file=File(directory!!,"19.jpg")
+        val before=file.readBytes()
+        compose.setContent { MaterialTheme { PhotoImportWithSample(Uri.fromFile(file)) } }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("疑似局部横纹").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("疑似局部横纹").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("生成修复预览").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("局部条纹暂不支持修复",substring=true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("修复预览").assertDoesNotExist()
+        assertArrayEquals(before,file.readBytes())
+    }
 }

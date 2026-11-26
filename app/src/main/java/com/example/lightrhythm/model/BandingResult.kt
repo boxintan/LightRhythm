@@ -66,6 +66,7 @@ data class BandingResult(
     val colorEvidence: ColorBandingEvidence? = null,
     val broadColorEvidence: BroadColorEvidence? = null,
     val localBandingEvidence: LocalBandingEvidence? = null,
+    val localizedStripes: List<LocalizedStripeRegion> = emptyList(),
 ) {
     val isSuspected: Boolean get() = status == BandingStatus.SUSPECTED ||
         status == BandingStatus.SUSPECTED_COLOR_BANDING || status == BandingStatus.SUSPECTED_BROAD_COLOR_BAND ||

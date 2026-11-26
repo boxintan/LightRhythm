@@ -69,4 +69,38 @@ class DetectionTileScaleTest {
             assertFalse(detectMoire(image).isSuspected)
         }
     }
+
+    @Test fun newlyLabeledScreenSamplesAreDetectedAtTheAppPreviewSize() {
+        for(name in listOf("14.jpg","17.jpg","18.jpg","19.jpg")) photo(name,1600) { image ->
+            val result=detectBanding(image)
+            assertEquals(name,BandingStatus.SUSPECTED_LOCAL_BANDING,result.status)
+            assertTrue(name,result.candidateRowOffsets.isEmpty())
+            if(name=="19.jpg") {
+                val regions=result.localizedStripes
+                assertTrue("Station display evidence missing",regions.size>=2)
+                assertTrue("Evidence should be on the upper displays",regions.all {
+                    it.axis==com.example.lightrhythm.model.StripeAxis.HORIZONTAL &&
+                        it.y>=image.height*.15 && it.y+it.height<=image.height*.35
+                })
+            }
+        }
+    }
+
+    @Test fun stationCeilingReflectionIsNotAHorizontalBandOrMoireCandidate() = photo("19.jpg",1600) { image ->
+        // Floor above the reflected displays: includes real ceiling slats and the central column.
+        val crop=Bitmap.createBitmap(image,image.width/4,image.height/2,image.width/2,image.height/6)
+        try {
+            assertFalse(detectBanding(crop).isSuspected)
+            assertFalse(detectMoire(crop).isSuspected)
+        } finally { crop.recycle() }
+    }
+
+    @Test fun reportAllNewSamplesWithoutTreatingCurrentOutputsAsLabels() {
+        for(name in (14..19).map { "$it.jpg" }) photo(name,1600) { image ->
+            val result=detectBanding(image)
+            val moire=detectMoire(image)
+            android.util.Log.i("NewSampleDetection","$name ${image.width}x${image.height} " +
+                "${result.status} moire=${moire.isSuspected} regions=${result.localizedStripes}")
+        }
+    }
 }

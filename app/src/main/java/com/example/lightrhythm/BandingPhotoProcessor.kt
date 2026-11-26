@@ -19,6 +19,9 @@ internal object BandingPhotoProcessor : PhotoProcessor {
         if (strength == 0f) return ProcessingResult.NotApplied("修复强度为零，未生成修复预览。")
         val detection = detectBanding(source)
         context.ensureActive()
+        if (detection.localizedStripes.isNotEmpty()) {
+            return ProcessingResult.NotApplied("局部条纹暂不支持修复，未生成修复预览。")
+        }
         if (detection.localBandingEvidence != null) {
             return ProcessingResult.NotApplied("局部或倾斜横纹暂不支持修复，未生成修复预览。")
         }
